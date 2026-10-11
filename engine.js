@@ -77,7 +77,7 @@
       const before=clone(this.payload);
       if(changes.venue!==undefined){if(!['A','B'].includes(changes.venue))throw new Error('Invalid venue');this.payload.venue=changes.venue;}
       if(changes.catering!==undefined){if(!['Basic','Premium'].includes(changes.catering))throw new Error('Invalid catering');this.payload.catering=changes.catering;}
-      if(changes.fields!==undefined){if(!Array.isArray(changes.fields)||changes.fields.some(x=>!NAMES[x])||new Set(changes.fields).size!==changes.fields.length)throw new Error('Invalid fields');this.payload.fields=[...changes.fields];}
+      if(changes.fields!==undefined){if(!Array.isArray(changes.fields)||changes.fields.some(x=>typeof x!=='string'||!Object.hasOwn(NAMES,x))||new Set(changes.fields).size!==changes.fields.length)throw new Error('Invalid fields');this.payload.fields=[...changes.fields];}
       if(changes.order!==undefined){
         if(!['venue-first','catering-first'].includes(changes.order))throw new Error('Invalid order');
         if(!this.completed.includes('venue')&&!this.completed.includes('catering'))this.plan=changes.order==='venue-first'?[...P0]:['brief','catering','venue','form','email','publish'];
