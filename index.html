@@ -1,25 +1,25 @@
 <!doctype html>
-<html lang="zh-Hans">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IS6912 · 工作坊监督任务</title><link rel="stylesheet" href="style.css"></head>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IS6912 · Workshop supervision task</title><link rel="stylesheet" href="style.css"></head>
 <body>
-  <header class="app-header"><div class="brand"><span class="brand-mark" aria-hidden="true">W</span><div><span class="eyebrow">WORKSHOP ASSISTANT</span><h1>工作坊筹备</h1></div></div><span class="session-badge">模拟任务 · <span id="phase-label">准备</span></span></header>
+  <header class="app-header"><div class="brand"><span class="brand-mark" aria-hidden="true">W</span><div><span class="eyebrow">WORKSHOP ASSISTANT</span><h1>Workshop preparation</h1></div></div><div class="header-actions"><span class="session-badge">Simulated task · <span id="phase-label">Setup</span></span><div class="lang-switch" role="group" aria-label="界面语言"><button type="button" translate="no" data-lang="en" lang="en" aria-pressed="true">EN</button><button type="button" translate="no" data-lang="zh" lang="zh-Hans" aria-pressed="false">中文</button></div></div></header>
   <nav class="session-steps" aria-label="参与流程"><ol id="session-steps"></ol></nav>
   <main id="app"></main>
   <dialog id="editor" aria-labelledby="edit-title"><form id="edit-form">
-    <div class="dialog-heading"><div><span class="eyebrow">当前操作已暂停</span><h2 id="edit-title">修改待执行动作</h2></div><button type="button" id="cancel-edit" aria-label="关闭修改窗口">关闭</button></div>
+    <div class="dialog-heading"><div><span class="eyebrow">当前操作已暂停</span><h2 id="edit-title">修改待执行动作</h2></div><div class="lang-switch" role="group" aria-label="界面语言"><button type="button" translate="no" data-lang="en" lang="en" aria-pressed="true">EN</button><button type="button" translate="no" data-lang="zh" lang="zh-Hans" aria-pressed="false">中文</button></div><button type="button" id="cancel-edit" aria-label="关闭修改窗口" data-tl="editor-cancel">关闭</button></div>
     <p class="hint">只修改你认为需要调整的内容。保存后仍保持暂停，确认预览后再继续。</p>
     <p class="dialog-timer" id="edit-timer" role="timer"></p>
     <div class="two-cols"><label>场地<select name="venue"><option>A</option><option>B</option></select></label><label>茶点<select name="catering"><option>Basic</option><option>Premium</option></select></label></div>
     <fieldset class="field-list"><legend>报名字段</legend><label><input type="checkbox" name="field" value="name">姓名</label><label><input type="checkbox" name="field" value="email">邮箱</label><label><input type="checkbox" name="field" value="diet">饮食偏好</label><label><input type="checkbox" name="field" value="hkid">HKID</label></fieldset>
     <label>尚未开始的资源步骤<select name="order"><option value="venue-first">场地 → 茶点</option><option value="catering-first">茶点 → 场地</option></select></label>
     <p class="small">已执行的资源步骤无法在这里倒改。关闭窗口不会恢复运行。</p>
-    <div class="actions"><button type="submit" class="primary">保存修改，返回预览</button></div>
+    <div class="actions"><button type="submit" class="primary" data-tl="editor-save">保存修改，返回预览</button></div>
   </form></dialog>
   <dialog id="direction" aria-labelledby="direction-title"><form id="direction-form">
-    <div class="dialog-heading"><div><span class="eyebrow">当前操作已暂停</span><h2 id="direction-title">调整后续处理方式</h2></div><button type="button" id="cancel-redirect">关闭</button></div>
+    <div class="dialog-heading"><div><span class="eyebrow">当前操作已暂停</span><h2 id="direction-title">调整后续处理方式</h2></div><div class="lang-switch" role="group" aria-label="界面语言"><button type="button" translate="no" data-lang="en" lang="en" aria-pressed="true">EN</button><button type="button" translate="no" data-lang="zh" lang="zh-Hans" aria-pressed="false">中文</button></div><button type="button" id="cancel-redirect" data-tl="direction-cancel">关闭</button></div>
     <p class="hint">选择一个处理方式。应用后仍保持暂停，确认预览后再继续。</p><p class="dialog-timer" id="direction-timer" role="timer"></p>
     <label>处理方式<select id="redirect-choice"><option value="safe-form">使用任务要求中的报名字段模板</option><option value="venue-first">先处理场地</option><option value="catering-first">先处理茶点</option></select></label>
-    <p id="direction-note" class="small"></p><div class="actions"><button type="submit" id="apply-redirect" class="primary">应用，返回预览</button></div>
+    <p id="direction-note" class="small"></p><div class="actions"><button type="submit" id="apply-redirect" class="primary" data-tl="direction-apply">应用，返回预览</button></div>
   </form></dialog>
-  <script src="engine.js"></script><script src="scenario.js"></script><script src="app.js"></script>
+  <script src="i18n.js"></script><script src="engine.js"></script><script src="scenario.js"></script><script src="telemetry.js"></script><script src="app.js"></script>
 </body></html>
