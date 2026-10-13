@@ -333,6 +333,12 @@
     var output = translate(source);
     if (node.textContent !== output) { writing += 1; node.textContent = output; writing -= 1; }
     state.rendered = output;
+    // bindText may create an English text node before the element is attached. Keep
+    // the source on that text node too, so dynamic templates round-trip without an
+    // inverse pattern when the observer later sees it or the language changes.
+    if (node.firstChild && node.firstChild.nodeType === 3) {
+      textState.set(node.firstChild, {canonical: source, rendered: output});
+    }
   }
 
   /** Canonical markup write: the source markup is what the app compares against. */
