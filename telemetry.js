@@ -38,6 +38,11 @@
   var AUTO_SCROLL_WINDOW = 300;
   var STORAGE_PREFIX = 'is6912-telemetry:';
   var SCROLL_AREAS = { 'source-panel': 'source', 'plan-panel': 'plan', 'trace-panel': 'trace', plan: 'plan', trace: 'trace' };
+  // Closed answer sets for the post-task recall. Anything outside them is dropped rather
+  // than stored, so a short typed string can never be persisted under an "enum" claim.
+  var RECALL_WHEN = ['before-start', 'update-time', 'later', 'never', 'unsure'];
+  var RECALL_ACTION = ['none', 'fields', 'order', 'review'];
+  var COMPREHENSION_KEYS = ['beforePublication', 'fields', 'budget'];
   var attachedTrials = new WeakSet();
 
   function randomId() {
@@ -100,6 +105,7 @@
     var state = {
       stage: null, stageStartMs: pageStartMs, stageActiveMs: 0, phase: null, stepId: null,
       planVisible: true, trial: null, cell: null, rendered: false,
+      design: null,
       visible: true, focused: true, exposedVisible: true, exposedFocused: true,
     };
 
@@ -319,6 +325,9 @@
       sessionId = details.sessionId;
       storageKey = STORAGE_PREFIX + sessionId;
       state.cell = details.cell || null;
+      // The frozen design snapshot travels with the attach so every later mirror decision
+      // (co-planning outcome, plan visibility) uses THIS session's design, never a live one.
+      state.design = details.design || null;
       state.planVisible = details.planVisible !== false;
       // Start from the real document state so a blurred or hidden page is not assumed visible.
       state.visible = document.visibilityState !== 'hidden';
@@ -398,6 +407,33 @@
       push('plan_exposure', { data: { plan: plan, revision: revision || 'initial', position: position || 1 } });
     }
 
+    /**
+     * The post-task UNPROMPTED current-plan recall.
+     *
+     * `given` maps a step id to the position the participant remembered, so a step left
+     * blank is simply absent — a real "I do not remember", never a zero. Only step ids and
+     * a small closed set of answers ever leave the browser: the typed event carries no free
+     * text, and both answers are checked against their allowlists before they are stored.
+     */
+    function planRecall(given, whenChanged, action) {
+      var recall = [];
+      for (var id in given) {
+        if (!Object.prototype.hasOwnProperty.call(given, id)) continue;
+        var position = parseInt(given[id], 10);
+        if (!Number.isInteger(position) || position < 1 || position > 16) continue;
+        recall.push(id + ':' + position);
+      }
+      push('plan_recall', {
+        data: {
+          recall: recall.join(','),
+          givenCount: recall.length,
+          when: RECALL_WHEN.indexOf(whenChanged) >= 0 ? whenChanged : '',
+          action: RECALL_ACTION.indexOf(action) >= 0 ? action : '',
+        },
+      });
+      flushSoon(FLUSH_DEBOUNCE);
+    }
+
     function refreshExposure() {
       if (!sessionId) return;
       var visibilityChanged = state.visible !== state.exposedVisible;
@@ -438,6 +474,25 @@
       // Private script state, recorded for every cell: the analysis can compare what the
       // script did with what the participant was allowed to see (plan_exposure).
       plan_event: function (data) { return ['agent_plan_event', { before: data.before, after: data.after, messageId: 'resource_update' }]; },
+      // ---- Protocol v2 (plan-dependent-v03) scripted events -------------------
+      // E1 (the shared resource update) is mirrored as `plan_revision`, so the revision
+      // and its order are recorded identically in both plan-dynamics arms.
+      revision: function (data) {
+        return ['plan_revision', { before: data.before, after: data.after, kind: 'resource_update' }];
+      },
+      review_started: function (data) { return ['review_started', { step: 'review' }]; },
+      // The four review checks are mirrored as ONE boolean per check: what passed, never
+      // a free-text verdict and never the participant's own words.
+      review_completed: function (data) {
+        var checks = (data && data.checks) || {};
+        return ['review_check', {
+          budget: checks.budget === true, capacity: checks.capacity === true,
+          fields: checks.fields === true, info: checks.info === true,
+          completed: true,
+        }];
+      },
+      recovery_scheduled: function (data) { return ['recovery_scheduled', { step: data.step || 'review' }]; },
+      recovery_resumed: function (data) { return ['recovery_resumed', { step: data.step || 'review' }]; },
       state_enter: function (data) { return ['agent_state_enter', { current: data.current || '', plan: data.plan }]; },
       seeded_payload: function (data) { return ['agent_seeded_payload', { payload: data.payload }]; },
       first_publication: function (data) { return ['agent_publication', { payload: data.payload }]; },
@@ -471,11 +526,20 @@
       direction_cancel: function () { return null; },
       ui_version: function () { return null; },
       live_models_prepared: function () { return null; },
+      // The scripted agent needs no model call; this records the (free) preparation instead.
+      script_prepared: function () { return ['script_prepared', { agentMode: 'scripted' }]; },
     };
 
     function planningOutcome(data) {
       var values = data && data.values ? data.values : {};
-      if (!state.cell || state.cell.slice(-1) !== 'C') return 'review';
+      // Co-planning outcomes only exist when the extension is enabled for this session and
+      // the participant was actually asked to arrange the plan. In the core study the
+      // standardized review-only preparation is always recorded as a review.
+      var design = state.design;
+      var extensionOn = Boolean(design && design.extensions && design.extensions.initialCoPlanning && design.extensions.initialCoPlanning.enabled);
+      if (!extensionOn) return 'review';
+      var co = design.extensions.initialCoPlanning.mode === 'co_planning';
+      if (!co) return 'review';
       return values.order0 === 'form' && values.order1 === 'email' && values.order2 === 'publish' ? 'matched' : 'mismatched';
     }
 
@@ -644,6 +708,18 @@
       decision: decision,
       markAutoScroll: function (area) { autoScroll[area] = performance.now() + AUTO_SCROLL_WINDOW; },
       planning: function (action, outcome, part) { push('planning_interaction', { data: { action: action, outcome: outcome, part: part } }); },
+      planRecall: planRecall,
+      /**
+       * A comprehension answer. Only the item key, the answer the closed select offers and
+       * a client observation of the response travel; the server owns first-correctness and
+       * every authoritative attempt count, and a retry is idempotent by `attemptId` there.
+       */
+      comprehensionAnswer: function (item, value, correct) {
+        if (COMPREHENSION_KEYS.indexOf(item) < 0) return;
+        if (typeof value !== 'string' || value.length === 0 || value.length > 32) return;
+        push('comprehension_answer', { data: { item: item, value: value, correct: correct === true } });
+        flushSoon(FLUSH_DEBOUNCE);
+      },
       practice: function (step, correct) { push('practice_step', { data: { step: step, correct: Boolean(correct) } }); },
       transition: function () { flushSoon(0); },
       summary: function () {

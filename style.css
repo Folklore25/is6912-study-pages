@@ -12,3 +12,35 @@
 .lang-switch button[aria-pressed=false]{color:var(--muted);background:var(--surface)}
 .story-copy{font-size:17px;line-height:1.8;max-width:68ch;margin-bottom:22px}.story-copy p{margin:0 0 18px}.story-copy p:last-child{margin-bottom:0}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important}}
+
+/* ---- Protocol v2 (plan-dependent-v03) -------------------------------------------
+ *
+ * NO EVENT-SPECIFIC VISUAL GRAMMAR.
+ *
+ * The `review` row is rendered by exactly the same `.plan li` rules as every other step:
+ * same `::before` counter chip, same status line, same typography, same borders. There is
+ * deliberately NO `.plan .review`, no `.plan .e2`, no warning/highlight/flash/ring style,
+ * no reordering and no transition anywhere in this block, because any of those would make
+ * the high-visibility plan an alarm and change what E2 looks like. A row's appearance is a
+ * function of its state alone (complete / current / pending) and of its index, so the
+ * layout at E2 is byte-identical to the layout before it. The only new rule below is the
+ * small muted "scheduled" note, which carries the same muted colour as a pending status.
+ */
+.plan .plan-scheduled{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+/* The review step preview: an ordinary list, no accent, no alert border. */
+.review-checks{list-style:none;padding:0;margin:8px 0 0}
+.review-checks li{padding:7px 0;border-bottom:1px solid #e4e9ed;font-size:15px}
+.review-checks li:last-child{border-bottom:0}
+/* The post-task unprompted recall: a compact label/number grid. */
+.recall-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;margin:10px 0 18px}
+.recall-grid legend{font-weight:550}
+.recall-item{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:8px 0;font-weight:500;min-height:44px}
+.recall-item input[type=number]{width:84px;min-height:40px;margin-top:0;text-align:center;font-variant-numeric:tabular-nums}
+.subhead{font-size:14px;font-weight:650;margin:22px 0 4px}
+@media(max-width:650px){.recall-grid{grid-template-columns:1fr}}
+/* The mandatory pre-publication review, shown in the TASK REQUIREMENTS panel of both the
+ * comprehension screen and the execution screen. It is a task constraint, phrased like every
+ * other bullet in that list: no accent colour, no border highlight, nothing that marks it
+ * as the answer to the manipulation. */
+.required-list li.required-rule strong::before{content:''}
+.required-list li.required-rule{border-top:1px solid var(--line);margin-top:2px;padding-top:10px}

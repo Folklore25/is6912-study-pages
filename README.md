@@ -1,5 +1,7 @@
-# IS6912 participant static assets
+# Human Loop Lab participant assets
 
-Public frontend assets only. Qualification, model calls, research records and administration live in separate Cloudflare Workers. No API keys or research records belong in this repository. Direct Pages URL is the asset origin; participants use the study service hostname.
+Public participant files for the controlled IS6912 pilot. Participants enter through https://study.humanlooplab.xyz/; qualification, records and administration are handled by separate protected services.
 
-UI supports English (default) and Chinese, with persistent language switching during the task. The source of truth is the private study-platform repository. Local assets live at `/Users/zohar/Code/Academic/IS6912/study-pages`; development happens in the sibling `study-platform` directory.
+Protocol v2 (`2026-10-19-plan-dependent-v03`) uses a scripted simulated workflow, four conditions and a mandatory review-recovery event. English is the default; participants choose English or Chinese before enrollment and keep that language for the session. No live model or provider credential belongs in these assets.
+
+The private study-platform repository is the source of truth. This repository contains no administrator interface, server configuration, invitation secrets or research records.

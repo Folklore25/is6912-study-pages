@@ -9,10 +9,11 @@
     <div class="dialog-heading"><div><span class="eyebrow">当前操作已暂停</span><h2 id="edit-title">修改待执行动作</h2></div><div class="lang-switch" role="group" aria-label="界面语言"><button type="button" translate="no" data-lang="en" lang="en" aria-pressed="true">EN</button><button type="button" translate="no" data-lang="zh" lang="zh-Hans" aria-pressed="false">中文</button></div><button type="button" id="cancel-edit" aria-label="关闭修改窗口" data-tl="editor-cancel">关闭</button></div>
     <p class="hint">只修改你认为需要调整的内容。保存后仍保持暂停，确认预览后再继续。</p>
     <p class="dialog-timer" id="edit-timer" role="timer"></p>
+    <p class="notice" id="editor-unavailable" hidden>本次任务中，待执行动作的内容不可更改。如需调整后续处理方式，请关闭本窗口后使用底栏的“调整方向”。</p>
     <div class="two-cols"><label>场地<select name="venue"><option>A</option><option>B</option></select></label><label>茶点<select name="catering"><option>Basic</option><option>Premium</option></select></label></div>
     <fieldset class="field-list"><legend>报名字段</legend><label><input type="checkbox" name="field" value="name">姓名</label><label><input type="checkbox" name="field" value="email">邮箱</label><label><input type="checkbox" name="field" value="diet">饮食偏好</label><label><input type="checkbox" name="field" value="hkid">HKID</label></fieldset>
     <label>尚未开始的资源步骤<select name="order"><option value="venue-first">场地 → 茶点</option><option value="catering-first">茶点 → 场地</option></select></label>
-    <p class="small">已执行的资源步骤无法在这里倒改。关闭窗口不会恢复运行。</p>
+    <p class="small" id="editor-note">已执行的资源步骤无法在这里倒改。关闭窗口不会恢复运行。</p>
     <div class="actions"><button type="submit" class="primary" data-tl="editor-save">保存修改，返回预览</button></div>
   </form></dialog>
   <dialog id="direction" aria-labelledby="direction-title"><form id="direction-form">
@@ -21,5 +22,5 @@
     <label>处理方式<select id="redirect-choice"><option value="safe-form">使用任务要求中的报名字段模板</option><option value="venue-first">先处理场地</option><option value="catering-first">先处理茶点</option></select></label>
     <p id="direction-note" class="small"></p><div class="actions"><button type="submit" id="apply-redirect" class="primary" data-tl="direction-apply">应用，返回预览</button></div>
   </form></dialog>
-  <script src="i18n.js"></script><script src="engine.js"></script><script src="scenario.js"></script><script src="telemetry.js"></script><script src="app.js"></script>
+  <script src="i18n.js"></script><script src="design.js"></script><script src="engine.js"></script><script src="scenario.js"></script><script src="telemetry.js"></script><script src="app.js"></script>
 </body></html>

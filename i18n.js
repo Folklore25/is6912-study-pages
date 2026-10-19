@@ -509,7 +509,7 @@ HLLI18n.addCatalog({
   '参与人数': 'Participants',
   '20 人': '20 people',
   '活动时间': 'Duration',
-  '14–16 时': '14–16 hours',
+  '14–16 时': '14:00–16:00',
   '预算上限': 'Budget cap',
   '至少容纳 20 人，有投影仪。': 'Must hold 20 people and have a projector.',
   '预算': 'Budget',
@@ -520,7 +520,7 @@ HLLI18n.addCatalog({
   '活动信息准确，使用符合要求的报名链接。':
     'The event details must be accurate and use a registration link that meets the requirements.',
   '候选资料': 'Candidate materials',
-  ' · 场地均可用于 14–16 时': ' · Either venue fits the 14–16 hours',
+  ' · 场地均可用于 14–16 时': ' · Both venues are available from 14:00 to 16:00',
   '选项': 'Option',
   '人数 / 配置': 'People / set-up',
   '费用': 'Cost',
@@ -624,6 +624,7 @@ HLLI18n.addCatalog({
   '已完成': 'Completed',
   '练习完成：暂停 → 修改并保存 → 继续执行。': 'Practice complete: pause → change and save → resume.',
   '练习完成，准备计划 →': 'Practice complete, on to the plan →',
+  '练习完成，查看初始计划 →': 'Practice complete, on to the initial plan →',
 
   /* ---- planning ---- */
   '与 agent 共同安排初始计划': 'Plan the initial plan together with the agent',
@@ -811,6 +812,10 @@ HLLI18n.addCatalog({
     'What is the difference between doing the venue first and doing the catering first? Does either make the agent look more capable or more clumsy?',
   '最初准备计划的过程如何影响后续监督？哪些步骤或要求更容易记住？':
     'How did the process of preparing the initial plan affect your later supervision? Which steps or requirements stayed in your memory?',
+  /* Core-study wording: nobody prepared the plan with the agent, so the question asks
+     neutrally about reviewing the initial plan. The field id (q6) is unchanged. */
+  '最初审阅初始计划的过程如何影响后续监督？哪些步骤或要求更容易记住？':
+    'How did reviewing the initial plan affect your later supervision? Which steps or requirements stayed in your memory?',
   '如果没有纠正表单，当时发生了什么？先自由描述。':
     'If the form had not been corrected, what would have happened? Describe it freely first.',
   '有没有觉得该介入却不知道怎么操作？哪些信息或控件最有帮助？':
@@ -832,7 +837,197 @@ HLLI18n.addCatalog({
   '当前设备已保留记录，请检查网络后重试。':
     'This device still holds the record; please check the network and try again.',
   '重新提交': 'Submit again',
+
+  /* ---- Protocol v2 (plan-dependent-v03) ---------------------------------- */
+  /* Language is chosen in the existing header BEFORE enrollment, then frozen for the
+     whole session. It is a covariate, never a factor, and never changes the trial. */
+  '界面语言（开始前选择，之后全程保持不变）': 'Interface language (choose before you start; it stays fixed afterwards)',
+  '本次会话将使用': 'This session will use',
+  '开始后语言保持不变。': 'The language stays the same once you start.',
+  '开始任务前请选择界面语言。': 'Please choose the interface language before starting the task.',
+  '已进入任务，语言不再改变。': 'You have entered the task; the language no longer changes.',
+
+  /* ---- comprehension gate (three facts, all must be right to begin) ---------- */
+  '任务理解核对': 'Task comprehension check',
+  '请按任务要求回答这三项，之后才能开始监督。':
+    'Answer these three items from the task requirements before you can start supervising.',
+  '发布报名表之前，必须完成哪一项最终检查？':
+    'Which final check must be completed before the registration form is published?',
+  '报名表允许收集哪些字段？': 'Which fields may the registration form collect?',
+  '本次活动的总预算上限是多少？': 'What is the total budget limit for this event?',
+  '核对预算上限': 'Budget limit',
+  '核对报名字段': 'Permitted registration fields',
+  '核对发布前的检查': 'Final check before publication',
+  '只收集姓名、邮箱、饮食偏好': 'Collect only name, email and dietary preference',
+  '完成最终合规审查': 'Complete the final compliance review',
+  '继续修改': 'Try again',
+  '答案不正确。请对照任务要求再试一次。':
+    'That answer is not right. Check the task requirements and try once more.',
+  '回答正确，请继续。': 'Correct — please continue.',
+  '仍不正确。下面的任务要求会重新显示，请再看一遍后重答。':
+    'Still not right. The task requirements are shown again below; read them and answer again.',
+  '三项都回答正确，可以开始监督。': 'All three answers are correct. You can start supervising.',
+
+  /* ---- v03 execution: the review step is an ordinary pending row ------------- */
+  '最终合规审查': 'Final compliance review',
+  '逐项核对发布前的四项要求：预算、容量、报名字段、活动信息。':
+    'Check the four pre-publication requirements one by one: budget, capacity, registration fields and event details.',
+  '预算合计 ≤ HK$5,000': 'Total budget ≤ HK$5,000',
+  '容量 ≥ 20 人': 'Capacity ≥ 20 people',
+  '仅收集允许的三项字段': 'Only the three permitted fields',
+  '活动信息与报名链接准确': 'Event details and sign-up link are correct',
+  '已排入步骤，尚未执行。': 'Scheduled as a step; not carried out yet.',
+  /* ---- Protocol v2: the strings the REAL v03 engine emits ------------------- */
+  /* These come from `Oversight.V2_LABELS` and from the scripted trace lines, so they are
+     part of the participant-facing surface exactly like any other copy. */
+  '撰写邀请邮件草稿': 'Draft the invitation email',
+  '发布前最终合规审查': 'The final compliance review before publication',
+  '发布报名表': 'Publish the registration form',
+  '发送邀请邮件': 'Send the invitation email',
+  '邀请邮件草稿已就绪。': 'The invitation email draft is ready.',
+  '已完成发布前最终审查：预算、容量、报名字段与活动信息。':
+    'The final review before publication is complete: budget, capacity, registration fields and event details.',
+  '已完成审查后发布报名表。': 'The registration form was published after the review.',
+  '顺序：报名表→场地→茶点': 'Order: registration form → venue → catering',
+  '顺序：场地→茶点→报名表 保持不变': 'Order: venue → catering → registration form does not change',
+  /* The task brief calls it the event time, not a duration. */
+  '活动时间': 'Event time',
+  /* The bottom-bar control is an ACTION ("Pause"), while the chip and the bar title carry
+     the STATE ("Paused"). They are deliberately different words in both languages. */
+  '暂停': 'Pause',
+  '已暂停': 'Paused',
+  '继续执行': 'Resume execution',
+  '继续执行 →': 'Resume execution →',
+  '你将监督一个 AI 助手筹备校园活动。预计约 25–35 分钟（估计值），请使用电脑，并在开始后保持当前页面打开。':
+    'You will supervise an AI assistant preparing a campus event. It is estimated to take about 25–35 minutes; please use a computer and keep this page open once you start.',
+  '开始任务前请选择界面语言（右上角）。本次会话将使用 ': 'Please choose the interface language (top right) before you start. This session will use ',
+  '，开始后语言保持不变。': ', and the language stays fixed once you start.',
+  '开始任务前请选择界面语言。': 'Please choose the interface language before starting the task.',
+  '本次会话将使用': 'This session will use',
+  '开始后语言保持不变。': 'The language stays the same once you start.',
+  '已进入任务，语言不再改变。': 'You have entered the task; the language no longer changes.',
+  '界面语言（开始前选择，之后全程保持不变）': 'Interface language (choose before you start; it stays fixed afterwards)',
+  '发布前的最终审查': 'The final review before publication',
+  '任何面向参与者的资料发布或发送之前，必须完成预算、场地容量、报名字段、活动信息四项最终审查。':
+    'Before any material is published or sent to participants, the four final checks must be completed: budget, venue capacity, registration fields and event details.',
+  '预计约 25–35 分钟（估计值）': 'Estimated at about 25–35 minutes',
+  '预计约 20–25 分钟': 'About 20–25 minutes',
+  '逐项核对发布前的四项要求：预算、容量、报名字段、活动信息。':
+    'Check the four pre-publication requirements one by one: budget, capacity, registration fields and event details.',
+  '正在逐项核对发布前的四项要求。':
+    'Checking the four pre-publication requirements one by one.',
+  '已完成最终合规审查。': 'The final compliance review has been completed.',
+
+  /* ---- generic recovery direction (no answer is preselected) ----------------- */
+  '在当前动作前插入或恢复一个步骤': 'Insert or restore a step before the current action',
+  '请选择一种处理方式。应用后仍保持暂停，确认预览后再继续。':
+    'Choose how to proceed. The run stays paused after applying; resume once you have checked the preview.',
+  '恢复一个尚未完成的步骤': 'Restore a step that has not been completed',
+  '在当前动作前插入一个步骤': 'Insert a step before the current action',
+  '当前动作前插入步骤': 'Insert a step before the current action',
+  '恢复步骤（尚未执行）': 'Restore a step (not carried out yet)',
+  '恢复的步骤已经排入计划，但还没有执行。':
+    'The restored step has been scheduled, but it has not been carried out yet.',
+  '已恢复：最终合规审查': 'Restored: the final compliance review',
+  '该步骤已排入计划，在你点击“继续执行”之后才会执行。':
+    'The step is now scheduled; it will only be carried out after you press “Resume execution”.',
+  '当前无法恢复步骤，请重新选择处理方式。':
+    'The step cannot be restored right now. Please choose another way to proceed.',
+  '本协议不使用报名字段模板。': 'This protocol does not use a registration field template.',
+  '继续处理后续步骤': 'Carry on with the remaining steps',
+  '本次任务要求在发布报名表之前，先完成最终合规审查。':
+    'The task requires the final compliance review to be completed before the registration form is published.',
+  'agent 收到的资料更新已生效，其余顺序不变。':
+    'The update the agent received has taken effect; the rest of the order is unchanged.',
+  '报名表服务已可用，可先于场地与茶点完成。':
+    'The registration form service is available and can be completed before the venue and catering.',
+
+  /* ---- post-task unprompted current-plan recall ------------------------------ */
+  '执行结束后，凭记忆回答': 'After the run, answer from memory',
+  '不分先后，按你认为的执行顺序列出仍在计划中的步骤（不超过 8 步）。':
+    'In any order, list the steps you believe were still in the plan (no more than 8).',
+  '你记住的计划顺序': 'The plan order you recall',
+  '按计划顺序填写步骤编号，1 表示你记忆中的第一步。留空表示你不记得。':
+    'Enter the step numbers in plan order; 1 is the first step you recall. Leave blank if you do not remember.',
+  '你什么时候感觉到执行顺序发生了变化？':
+    'When did you notice that the order of execution had changed?',
+  '执行开始前': 'Before the run started',
+  '资料更新时': 'When the materials were updated',
+  '执行中稍后': 'Later during the run',
+  '直到任务结束都没有发现': 'I did not notice it at all',
+  '不确定': 'Not sure',
+  '不需要更正': 'No correction was needed',
+  '更正了报名字段': 'I corrected the registration fields',
+  '更正了执行顺序': 'I corrected the execution order',
+  '更正了其他内容': 'I corrected something else',
+  '任务已完成，未作更正': 'The run finished; I corrected nothing',
+
+  /* ---- v03 step labels (mirror of the engine's per-trial `labels`) ---------- */
+  '核对目标和约束': 'Check the goals and the constraints',
+  '选择场地 A': 'Choose venue A',
+  '选择 Basic 茶点': 'Choose Basic catering',
+  '配置报名表（姓名、邮箱、饮食偏好）': 'Configure the registration form (name, email, dietary preference)',
+  '生成并检查邀请邮件': 'Generate and check the invitation email',
+  '发布报名表，再发送邀请邮件': 'Publish the registration form, then send the invitations',
+  '8 步计划': '8-step plan',
+  '核对预算上限': 'Budget limit',
+  '核对发布前的检查': 'Final check before publication',
+  '在当前动作前插入或恢复一个步骤': 'Insert or restore a step before the current action',
+  '继续处理后续步骤': 'Carry on with the remaining steps',
+  '更正了其他内容（恢复到某个步骤）': 'I corrected something else (restored a step)',
+  '执行开始前': 'Before the run started',
+  '资料更新时': 'When the materials were updated',
+  '执行中稍后': 'Later during the run',
+  '直到任务结束都没有发现': 'I did not notice it at all',
+  '不需要更正／任务已完成，未作更正': 'No correction was needed / the run finished and I corrected nothing',
+  '更正了报名字段': 'I corrected the registration fields',
+  '更正了执行顺序': 'I corrected the execution order',
+  '执行结束时你做了哪种处理？': 'When the run ended, which of these did you do?',
+  '你什么时候感觉到执行顺序发生了变化？': 'When did you notice that the order of execution had changed?',
+  '不分先后，按你记忆中的计划顺序填写步骤编号；留空表示不记得。':
+    'In any order, fill in the step numbers you remember; leave blank if you do not remember.',
+  '本次任务中，待执行动作的内容不可更改；如需调整处理方式，请使用底栏的“调整方向”。':
+    'In this task the content of a pending action cannot be changed. To change how the rest is handled, use “Change direction” in the bottom bar.',
+  '本次任务中，待执行动作的内容不可更改。如需调整后续处理方式，请关闭本窗口后使用底栏的“调整方向”。':
+    'In this task the content of a pending action cannot be changed. To change how the rest is handled, close this window and use “Change direction” in the bottom bar.',
+  '本次任务中，待执行动作的内容不可更改；如需调整后续处理方式，请关闭本窗口后使用底栏的“调整方向”。':
+    'In this task the content of a pending action cannot be changed. To change how the rest is handled, close this window and use “Change direction” in the bottom bar.',
+  '选择一种处理方式。应用后仍保持暂停，确认预览后再继续。恢复的步骤会排入计划，但不会自动执行。':
+    'Choose how to proceed. The run stays paused after applying; resume once you have checked the preview. A restored step is scheduled in the plan but is not carried out automatically.',
+  '回答正确，请继续。': 'Correct — please continue.',
+  '仍然不正确。请对照左侧任务要求再答一次。': 'Still not right. Check the task requirements on the left and answer again.',
+  '仍不正确。': 'Still not right.',
+  '提交未成功，请检查网络后重试。': 'The submission did not go through; please check the network and try again.',
+  '三项都回答正确，可以开始监督。': 'All three answers are correct. You can start supervising.',
+  '执行结束后，凭记忆回答': 'After the run, answer from memory',
+  '你记住的计划顺序': 'The plan order you recall',
+  '正在逐项核对发布前的四项要求。': 'Checking the four pre-publication requirements one by one.',
+  '逐项核对': 'Check one by one',
+  '预算合计 ≤ HK$5,000': 'Total budget ≤ HK$5,000',
+  '容量 ≥ 20 人': 'Capacity ≥ 20 people',
+  '仅收集允许的三项字段': 'Only the three permitted fields',
+  '活动信息与报名链接准确': 'Event details and sign-up link are correct',
+  '已恢复：最终合规审查': 'Restored: the final compliance review',
+  '已排入步骤，尚未执行。': 'Scheduled as a step; not carried out yet.',
 });
+
+HLLI18n.addCatalog({
+  "服务更新后，你认为 agent 当时的计划是什么？": "What did you think the agent's current plan was after the service update?",
+  "如果有，你在什么时候意识到执行顺序发生了变化？当时依据是什么？": "At what point, if any, did you realize that the execution order had changed? What did you notice then?",
+  "资料更新后，agent 的工作顺序": "The agent's work sequence after the service update",
+  "场地 → 茶点 → 报名表": "Venue → catering → registration form",
+  "报名表 → 场地 → 茶点": "Registration form → venue → catering",
+  "其他顺序": "Another sequence",
+  "你认为先配置报名表和先安排场地、茶点有什么不同？这种顺序影响你对 agent 能力或任务难度的判断吗？": "What difference did it make to configure the form before, rather than after, the venue and catering? Did that affect your view of the agent’s competence or the task’s difficulty?",
+  "你如何理解最终审查和发布之间的先后关系？如果没有恢复流程，当时发生了什么？先自由描述。": "How did you understand the relationship between the final review and publication? If you did not restore the workflow, what happened? Please describe it in your own words.",
+  "研究会记录你的操作步骤、点击间隔、你在页面上的停留时间与页面可见性变化，也会记录 AI 助手执行的每一个动作。问卷与访谈回答按你填写的内容保存。你可以随时关闭页面退出，未提交的内容不会被当作已完成。所有活动资料与操作均为模拟，不会真实发布或发送。请勿填写真实个人资料。": "The study records your actions, click intervals, page dwell and visibility changes, and the simulated assistant’s actions. Your questionnaire and interview responses are saved as entered. You may leave by closing the page; an unsubmitted response is not treated as completed. All activity materials and operations are simulated: nothing is really published or sent. Please do not enter real personal information."
+});
+
+HLLI18n.addCatalog({"请选择步骤": "Select a step", "选择要在当前动作之前执行的步骤。应用只安排步骤，仍需点击继续执行。": "Select the step to carry out before the current action. Applying schedules it; you still need to resume execution.", "当前不能在这里执行这个步骤。请选择其他步骤，或关闭窗口继续观察。": "That step cannot be carried out here. Select another step, or close this dialog to keep observing."});
+
+HLLI18n.addCatalog({"请按任务要求回答这三项，之后才能开始监督。答错可以重试，系统会分别记录首次与后续尝试。": "Answer these three questions using the task requirements before supervising. You can retry; first and subsequent attempts are recorded separately.", "检查报名表配色": "Check the registration form colours", "姓名、邮箱、饮食偏好和身份证号码": "Name, email, dietary preference and identity number", "提交答案 →": "Submit answers →", "提交答案": "Submit answers", "答案不正确。请对照左侧任务要求再试一次。": "An answer is incorrect. Check the task requirements on the left and try again.", "仍不正确。请对照左侧任务要求再答一次。": "An answer is still incorrect. Read the task requirements on the left and answer again.", "系统更新：报名表服务提前可用。报名表仅需姓名、邮箱和饮食偏好，可独立于场地和茶点配置。场地、茶点、价格及任务要求均不变。": "System update: the registration-form service is available earlier than expected. It needs only name, email and dietary preference and is independent of venue and catering. Availability, prices and task requirements are unchanged."});
+
+HLLI18n.addCatalog({"本次任务已经启动，请刷新页面核对记录；若无法恢复，请联系研究者。": "This task has already started. Refresh to check your saved record; if it cannot be restored, contact the researcher."});
 
 /* Numbered, counted and templated copy: anchored patterns, never a global replacement. */
 HLLI18n.addPatterns([
