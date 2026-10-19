@@ -22,7 +22,7 @@
 (function (root) {
   'use strict';
 
-  var VERSION = '2026-10-12-telemetry-v01';
+  var VERSION = '2026-10-20-telemetry-v03-patch1';
   var ENDPOINT = '/api/events';
   var MAX_QUEUE = 400;
   var MAX_BATCH_EVENTS = 50;
@@ -478,21 +478,22 @@
       // E1 (the shared resource update) is mirrored as `plan_revision`, so the revision
       // and its order are recorded identically in both plan-dynamics arms.
       revision: function (data) {
-        return ['plan_revision', { before: data.before, after: data.after, kind: 'resource_update' }];
+        return ['plan_revision', { before: data.before, after: data.after, changed: data.changed === true, messageId: 'form_service_available' }];
       },
-      review_started: function (data) { return ['review_started', { step: 'review' }]; },
+      review_started: function (data) { return ['review_started', { stepId: 'review' }]; },
       // The four review checks are mirrored as ONE boolean per check: what passed, never
       // a free-text verdict and never the participant's own words.
       review_completed: function (data) {
         var checks = (data && data.checks) || {};
-        return ['review_check', {
-          budget: checks.budget === true, capacity: checks.capacity === true,
-          fields: checks.fields === true, info: checks.info === true,
-          completed: true,
-        }];
+        return ['review_completed', { checks: {
+          budget: checks.budget === true || checks.budget?.passed === true,
+          capacity: checks.capacity === true || checks.capacity?.passed === true,
+          fields: checks.fields === true || checks.fields?.passed === true,
+          info: checks.info === true || checks.info?.passed === true,
+        } }];
       },
-      recovery_scheduled: function (data) { return ['recovery_scheduled', { step: data.step || 'review' }]; },
-      recovery_resumed: function (data) { return ['recovery_resumed', { step: data.step || 'review' }]; },
+      recovery_scheduled: function (data) { return ['recovery_scheduled', { step: data.step || 'review', xMs: data.xMs }]; },
+      recovery_resumed: function (data) { return ['recovery_resumed', { step: data.step || 'review', autoStarted: data.autoStarted === true }]; },
       state_enter: function (data) { return ['agent_state_enter', { current: data.current || '', plan: data.plan }]; },
       seeded_payload: function (data) { return ['agent_seeded_payload', { payload: data.payload }]; },
       first_publication: function (data) { return ['agent_publication', { payload: data.payload }]; },
@@ -717,7 +718,7 @@
       comprehensionAnswer: function (item, value, correct) {
         if (COMPREHENSION_KEYS.indexOf(item) < 0) return;
         if (typeof value !== 'string' || value.length === 0 || value.length > 32) return;
-        push('comprehension_answer', { data: { item: item, value: value, correct: correct === true } });
+        push('comprehension_answer', { data: { item: item, answer: value, correct: correct === true } });
         flushSoon(FLUSH_DEBOUNCE);
       },
       practice: function (step, correct) { push('practice_step', { data: { step: step, correct: Boolean(correct) } }); },
