@@ -44,6 +44,9 @@ const Oversight=(()=>{
   const E1_AT_MS = 20000;
   const REVIEW_STEP = 'review';
   const PAUSE_LIMIT_MS = 60000;
+  // Bound pathological repeated transitions. Normal scripted paths visit each phase
+  // only a few times; a corrupt cycle ends as a technical interruption.
+  const MAX_PHASE_ENTRIES = 64;
   // The three work steps between the brief and the email draft, in whatever order the
   // current plan puts them. Everything else is fixed by the protocol.
   const WORK_STEPS = ['venue', 'catering', 'form'];
@@ -93,6 +96,9 @@ const Oversight=(()=>{
       this.labels=this.isProtocolV2?{...V2_LABELS}:{...LABELS};
       this.activeMs=0; this.wallMs=0; this.phaseMs=0; this.pauseMs=0;
       this.phase='ready'; this.paused=false; this.editorOpen=false; this.ended=false;
+      // How many times each phase has been entered. Used only to detect a protocol that has
+      // stopped making progress; it never affects a legitimate trajectory.
+      this.phaseEntries={};
       this.plan=[...this.initialPlan]; this.completed=[]; this.trace=[]; this.events=[];
       this.payload={venue:'A',catering:'Basic',fields:[...FIELDS]};
       this.published=null; this.emailSent=false; this.e2Start=null; this.e2End=null;
@@ -128,6 +134,14 @@ const Oversight=(()=>{
     /** True once the shared 20 s boundary has passed: the only legitimate layout change. */
     revisionDue(){return this.isProtocolV2&&!this.revisionApplied&&this.phase==='brief'&&this.activeMs>=E1_AT_MS;}
     enter(phase) {
+      // Count every entry so a protocol that stops making progress is detected rather
+      // than looped on forever by the caller.
+      this.phaseEntries[phase]=(this.phaseEntries[phase]??0)+1;
+      if (this.phaseEntries[phase]>MAX_PHASE_ENTRIES) {
+        this.protocolFlags.push('phase_entry_limit');
+        this.finish('technical_interruption');
+        return;
+      }
       this.phase=phase; this.phaseMs=0;
       if (this.isProtocolV2) return this.enterV2(phase);
       if (phase==='event') {
@@ -281,7 +295,21 @@ const Oversight=(()=>{
       // The single shared revision boundary. It never costs an extra stage and it never
       // reorders, highlights or warns anything about the pending review.
       if(this.revisionDue())this.applyRevision();
-      if(this.phaseMs>=this.duration())this.next();
+      // Invalid duration values are outside the frozen protocol. End as a technical
+      // interruption rather than allowing a driver to keep ticking a broken state.
+      const budget=this.duration();
+      if(!Number.isFinite(budget)||budget<=0){this.protocolFlags.push('invalid_phase_duration');this.finish('technical_interruption');return;}
+      if(this.phaseMs>=budget){
+        // Progress is measured by the step AND by the number of completed steps: the
+        // historical path legitimately re-enters `resource` while one work step is still
+        // open, so the phase name alone is not progress. If `next()` changes neither, the
+        // protocol is stuck and the trial ends instead of looping forever.
+        const phaseBefore=this.phase;const doneBefore=this.completed.length;
+        this.next();
+        if(!this.ended&&this.phase===phaseBefore&&this.completed.length===doneBefore){
+          this.protocolFlags.push('no_progress');this.finish('technical_interruption');return;
+        }
+      }
     }
     intervention(kind){
       if(this.isProtocolV2){
