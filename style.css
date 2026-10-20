@@ -44,3 +44,7 @@
  * as the answer to the manipulation. */
 .required-list li.required-rule strong::before{content:''}
 .required-list li.required-rule{border-top:1px solid var(--line);margin-top:2px;padding-top:10px}
+
+.language-lock-note{position:fixed;top:90px;right:24px;z-index:30;max-width:min(390px,calc(100vw - 32px));padding:12px 16px;border:1px solid var(--line,#d8dee6);border-radius:12px;background:var(--surface,#fff);color:var(--ink,#172b4d);box-shadow:0 4px 18px #172b4d15;font-size:14px;pointer-events:none}
+
+.language-choice{max-width:680px;margin:48px auto}.language-options{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:28px 0}.language-options button{min-height:84px;font-size:22px;border:2px solid var(--line,#d8dee6);background:#fff}.language-options button[aria-pressed=true]{border-color:var(--accent,#245bb5);background:#f0f5fc}.language-choice .hint{min-height:24px}

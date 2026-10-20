@@ -91,6 +91,8 @@
   function setLanguage(next) {
     if (!isLanguage(next)) return language;
     if (next === language) return language;
+    // Applications may lock a formal task without disabling the language controls.
+    if (root.document && !root.document.dispatchEvent(new root.CustomEvent('hll:beforelanguagechange', { cancelable: true, detail: { from: language, to: next } }))) return language;
     var from = language;
     language = next;
     persist();
@@ -1104,4 +1106,27 @@ HLLI18n.addPatterns([
   },
 ]);
 
+HLLI18n.addCatalog({
+  "正式部分的语言已确认，之后保持固定。": "The language for the formal part is confirmed and will remain fixed.",
+  "正式部分的语言已确认，之后保持固定。请继续完成本次任务。": "The language for the formal part is fixed. Please continue with this session.",
+  "正式语言确认": "Confirm language",
+  "确认正式任务语言": "Confirm the task language",
+  "接下来将显示初始计划。请确认你要使用的语言，之后任务和问卷将保持该语言。": "The initial plan comes next. Confirm the language you want to use; the task and questionnaire will stay in that language.",
+  "当前语言：": "Current language:",
+  "如需修改，请使用右上角的语言选项。": "To change it, use the language options at the top right.",
+  "确认语言，查看计划 →": "Confirm language and view the plan →",
+  "未能确认语言，请检查网络后重试。": "Language could not be confirmed. Check your connection and try again."
+});
+
+HLLI18n.addCatalog({
+  "选择语言": "Choose language",
+  "选择你的任务语言": "Choose your task language",
+  "请选择你更熟悉的语言。说明与练习阶段仍可修改；正式部分开始前会再次确认。": "Choose the language you are more comfortable with. You can still change it during instructions and practice; you will confirm it again before the formal part.",
+  "请先选择一种语言。": "Select a language first.",
+  "确认并继续 →": "Confirm and continue →",
+  "可以确认。你也可以改选语言。": "You can confirm now, or change your language.",
+});
+HLLI18n.addPatterns([{re:/^确认前请稍候 (\d+) 秒$/,en:function(m){return "Please wait "+m[1]+" seconds before confirming";}}]);
+
+HLLI18n.addCatalog({'说明和练习阶段可修改语言；正式计划显示前再确认并锁定。':'You can change language during instructions and practice. Confirm and lock it before the formal plan is shown.'});
 HLLI18n.start();

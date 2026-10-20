@@ -390,6 +390,12 @@
       flushSoon(FLUSH_DEBOUNCE);
     }
 
+    function languageAttempt(from, to) {
+      if (!sessionId || !['en','zh'].includes(from) || !['en','zh'].includes(to)) return;
+      push('language_switch_attempt', { data: { from: from, to: to, blocked: true } });
+      flushSoon(FLUSH_DEBOUNCE);
+    }
+
     function setExecution(phase, stepId) {
       if (!sessionId) return;
       var changed = phase !== state.phase || stepId !== state.stepId;
@@ -701,6 +707,7 @@
       setPlanVisibility: function (visible) { state.planVisible = Boolean(visible); },
       languageInitial: languageInitial,
       languageChange: languageChange,
+      languageAttempt: languageAttempt,
       setTrial: function (trial) { state.trial = trial; },
       planShown: planShown,
       heartbeat: heartbeat,

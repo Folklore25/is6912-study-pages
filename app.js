@@ -15,7 +15,7 @@
 // fallback so an old snapshot keeps rendering exactly as it did before this change.
 const {Trial,P0,LABELS,FIELDS,NAMES}=Oversight;
 const StudyDesign=window.StudyDesign;
-const UI_VERSION='2026-10-19-plan-dependent-v04';
+const UI_VERSION='2026-10-20-language-choice-v05';
 // Behavioural telemetry. Fire and forget everywhere: it never runs inside the timed
 // execution path and never blocks completion. Event ids are stable for idempotent retry.
 const telemetry=HLLTelemetry.create();
@@ -30,10 +30,8 @@ const v2=()=>Boolean(trial&&trial.isProtocolV2);
 const sessionPlan=()=>trial?(Array.isArray(trial.initialPlan)&&trial.initialPlan.length?trial.initialPlan:P0):P0;
 const stepLabel=id=>trial&&trial.labels&&Object.hasOwn(trial.labels,id)?trial.labels[id]:(LABELS[id]||id);
 const stepLabels=()=>sessionPlan().map(stepLabel);
-// The language a session froze at enrollment. `null` before the session is known (and for
-// every pre-v03 session), in which case the header keeps its historical free-switch
-// behaviour exactly as before.
-let frozenLanguage=null;
+// Formal language is server-locked at preparation, before any P0 plan is shown.
+let frozenLanguage=null,languageContext=null,entryLanguageCleanup=null;
 const languageLocked=()=>frozenLanguage==='en'||frozenLanguage==='zh';
 // The immutable design snapshot for this session. Frozen at enrollment; never re-read
 // from a live setting. `design` is the resolved snapshot object used by the UI.
@@ -68,7 +66,7 @@ function resolveDesign(info){
   if(snapshot)return StudyDesign.validateDesign(snapshot);
   return StudyDesign.designForCell(info.cell);
 }
-function view(next,label){stage=next;telemetry.setStage(next);HLLI18n.bindText(phaseLabel,label);document.body.classList.toggle('execution-mode',next==='execution');const pos=({setup:-1,comprehension:0,intro:0,'intro-rules':0,training:0,planning:1,'final-plan':1,execution:2,questionnaire:3,interview:3,done:3})[next];document.querySelector('#session-steps').innerHTML=['说明与练习','准备计划','监督执行','任务后回答'].map((x,i)=>`<li class="${i===pos?'active':''}" ${i===pos?'aria-current="step"':''}><span class="step-num">${i+1}</span>${x}</li>`).join('');window.scrollTo(0,0);}
+function view(next,label){if(entryLanguageCleanup){entryLanguageCleanup();entryLanguageCleanup=null;}stage=next;telemetry.setStage(next);HLLI18n.bindText(phaseLabel,label);document.body.classList.toggle('execution-mode',next==='execution');const pos=({setup:-1,comprehension:0,intro:0,'intro-rules':0,training:0,planning:1,'final-plan':1,execution:2,questionnaire:3,interview:3,done:3})[next];document.querySelector('#session-steps').innerHTML=['说明与练习','准备计划','监督执行','任务后回答'].map((x,i)=>`<li class="${i===pos?'active':''}" ${i===pos?'aria-current="step"':''}><span class="step-num">${i+1}</span>${x}</li>`).join('');window.scrollTo(0,0);}
 const planVisible=()=>design?design.planVisibility==='high':(trial&&trial.cell.split('-')[1]==='H');
 // The plan version the participant can actually see. In the low plan-visibility cell the
 // panel does not exist, so nothing is exposed even though the script state is logged.
@@ -87,36 +85,55 @@ const api=async(path,data)=>{const response=await fetch('/api/'+path,{method:dat
 // Telemetry binding is safe for new, resumed and already completed sessions: attaching is
 // idempotent per page, and a completed session simply records a short closing trace. The
 // frozen design snapshot is recorded once and never re-derived from a live toggle.
-function bindSession(info){if(!info||!info.id)return;applyFrozenLanguage(info.language);telemetry.attach({sessionId:info.id,cell:info.cell,design,planVisible:planVisible()});telemetry.languageInitial(HLLI18n.getInitialLanguage());}
+function bindSession(info){if(!info||!info.id)return;if(info.bundle?.languageContext)languageContext=info.bundle.languageContext;if(['ready','running','completed'].includes(info.status))applyFrozenLanguage(info.language);telemetry.attach({sessionId:info.id,cell:info.cell,design,planVisible:planVisible()});telemetry.languageInitial(HLLI18n.getInitialLanguage());}
 function bindTrial(instance){if(!instance)return;telemetry.setPlanVisibility(planVisible());telemetry.setTrial(instance);telemetry.attachTrial(instance);}
-/**
- * The language chosen in the header BEFORE enrollment is frozen by the server at
- * enrollment and repeated on every session response. Once it is known the switch is still
- * rendered (so the UI never changes shape mid-session) but it is disabled and annotated:
- * the contract freezes the language for the whole session, questionnaire included. A
- * pre-v03 session carries no language field and keeps the historical free switch, which is
- * a participant preference and never a factor either way.
- */
 function applyFrozenLanguage(language){
   if(language!=='en'&&language!=='zh')return;
-  frozenLanguage=language;
-  // The server is authoritative: adopt it even when localStorage disagrees, so a reload can
-  // never show a participant a language their answers are not recorded in.
+  frozenLanguage=null; // Authoritative session adoption precedes installing its guard.
   if(HLLI18n.getLanguage()!==language)HLLI18n.setLanguage(language);
-  for(const group of document.querySelectorAll('.lang-switch')){
-    group.setAttribute('aria-label','界面语言（开始前选择，之后全程保持不变）');
-    for(const button of group.querySelectorAll('[data-lang]')){
-      button.disabled=true;
-      button.title='已进入任务，语言不再改变。';
-      button.setAttribute('aria-pressed',String(button.getAttribute('data-lang')===language));
-    }
+  frozenLanguage=language;
+  for(const button of document.querySelectorAll('.lang-switch [data-lang]')){
+    button.disabled=false;
+    button.title='正式部分的语言已确认，之后保持固定。';
+    button.setAttribute('aria-pressed',String(button.getAttribute('data-lang')===language));
   }
+}
+function explainLanguageLock(){
+  let note=document.getElementById('language-lock-note');
+  if(!note){note=document.createElement('p');note.id='language-lock-note';note.className='language-lock-note';note.setAttribute('role','status');document.querySelector('.app-header').append(note);}
+  HLLI18n.bindText(note,'正式部分的语言已确认，之后保持固定。请继续完成本次任务。');
+}
+document.addEventListener('hll:beforelanguagechange',event=>{
+  if(!languageLocked()||event.detail.to===frozenLanguage)return;
+  event.preventDefault();explainLanguageLock();telemetry.languageAttempt(event.detail.from,event.detail.to);
+});
+function confirmFormalLanguage(){
+  view('training','正式语言确认');
+  app.innerHTML=`<section class="sheet panel"><h2>确认正式任务语言</h2><p>接下来将显示初始计划。请确认你要使用的语言，之后任务和问卷将保持该语言。</p><p>当前语言：<strong id="formal-language" translate="no">${HLLI18n.getLanguage()==='en'?'English':'中文'}</strong></p><p class="hint">如需修改，请使用右上角的语言选项。</p><button id="formal-language-confirm" class="primary" data-tl="formal-language-confirm">确认语言，查看计划 →</button><p id="formal-language-status" class="feedback" role="status"></p></section>`;
+  document.querySelector('#formal-language-confirm').onclick=async()=>{
+    const button=document.querySelector('#formal-language-confirm');button.disabled=true;
+    try{
+      let result;
+      try{result=await api('prepare',{language:HLLI18n.getLanguage()});}
+      catch(error){
+        if(error.message!=='language_locked')throw error;
+        const canonical=await api('session');
+        if(!['ready','running','completed'].includes(canonical.status))throw error;
+        if(canonical.status!=='ready'){await setup();return;}
+        result={language:canonical.language,bundle:canonical.bundle};
+      }
+      trial.modelBundle=result.bundle;languageContext=result.bundle?.languageContext??null;
+      session={...session,status:'ready',language:result.language,bundle:result.bundle};
+      applyFrozenLanguage(result.language);finalPlan();
+    }catch{setText('formal-language-status','未能确认语言，请检查网络后重试。');button.disabled=false;}
+  };focusHeading();
 }
 function unavailable(message){view('setup','参与入口');app.innerHTML=`<section class="sheet panel"><h2>暂时无法继续</h2><p>${esc(message)}</p><p class="hint">请联系向你发送邀请码的研究者。</p></section>`;}
 async function setup(){
  view('setup','参与入口');app.innerHTML='<section class="sheet panel"><h2>正在检查参与入口…</h2></section>';
- try{session=await api('session');if(session.status==='completed'){thankYou(session.id);return;}
+ try{session=await api('session');if(session.status==='completed'){design=resolveDesign(session);bindSession(session);thankYou(session.id);return;}
  if(session.status==='running'){
+  applyFrozenLanguage(session.language);
   let saved;try{saved=JSON.parse(localStorage.getItem('is6912-online-progress')||'null');}catch{}
   if(!saved||saved.id!==session.id||!saved.state){unavailable('测试页面曾中断，当前设备没有可恢复的记录。');return;}
   // The snapshot comes from the session record, so a reload can never replay the local
@@ -142,10 +159,41 @@ async function setup(){
  intro();return;
  }catch(error){if(error.message!=='session_required'&&error.message!=='session_expired'){unavailable('暂时无法连接参与服务，请稍后刷新。');return;}}
  const status=await api('status').catch(()=>({accepting:false}));
- app.innerHTML=`<section class="sheet panel"><span class="eyebrow">HUMAN LOOP LAB</span><h2 style="margin-top:8px">欢迎参加 AI 协作任务研究</h2><p>你将监督一个 AI 助手筹备校园活动。预计约 25–35 分钟（估计值），请使用电脑，并在开始后保持当前页面打开。</p><div class="notice">研究会记录你的操作步骤、点击间隔、你在页面上的停留时间与页面可见性变化，也会记录 AI 助手执行的每一个动作。问卷与访谈回答按你填写的内容保存。你可以随时关闭页面退出，未提交的内容不会被当作已完成。所有活动资料与操作均为模拟，不会真实发布或发送。请勿填写真实个人资料。</div>${languageLocked()?'':'<p class="small">开始任务前请选择界面语言（右上角）。本次会话将使用 <strong id="entry-language">'+esc(HLLI18n.getLanguage())+'</strong>，开始后语言保持不变。</p>'}<form id="enroll"><label>邀请码<input type="text" name="invite" autocomplete="off" spellcheck="false" required></label><label class="check-row"><input type="checkbox" name="consent" required><span>我已阅读说明，自愿参与本次研究。</span></label><p id="entry-note" class="feedback" role="status">${status.accepting?'输入研究者提供的邀请码，确认资格后进入任务。':'当前暂未开放参与，请等待研究者通知。'}</p><button type="submit" class="primary" data-tl="enroll-submit" ${status.accepting?'':'disabled'}>验证邀请码，进入任务 →</button></form></section>`;
- // The preview text follows the switch the participant actually has selected, up to the
- // moment the server freezes it.
- document.addEventListener('hll:languagechange',()=>{const preview=document.getElementById('entry-language');if(preview)HLLI18n.bindText(preview,HLLI18n.getLanguage());});
+ if(status.protocolVersion===StudyDesign.PROTOCOL_VERSION){entryLanguageChoice(()=>renderEnrollment(status));return;}
+ renderEnrollment(status);
+}
+function entryLanguageChoice(onConfirm){
+ view('setup','选择语言');
+ let chosen=null,deadline=0;
+ app.innerHTML=`<section id="entry-language-choice" class="sheet panel language-choice"><span class="eyebrow">HUMAN LOOP LAB</span><h2>选择你的任务语言</h2><p>请选择你更熟悉的语言。说明与练习阶段仍可修改；正式部分开始前会再次确认。</p><div class="language-options" role="group" aria-label="选择语言"><button type="button" data-entry-lang="en" translate="no" lang="en" aria-pressed="false">English</button><button type="button" data-entry-lang="zh" translate="no" lang="zh-Hans" aria-pressed="false">中文</button></div><p id="entry-language-countdown" class="hint" role="status">请先选择一种语言。</p><button id="entry-language-confirm" class="primary" disabled>确认并继续 →</button></section>`;
+ const confirm=document.querySelector('#entry-language-confirm');
+ const update=()=>{
+   if(!chosen)return;
+   const left=Math.max(0,Math.ceil((deadline-performance.now())/1000));
+   confirm.disabled=left>0;
+   setText('entry-language-countdown',left?`确认前请稍候 ${left} 秒`:'可以确认。你也可以改选语言。');
+ };
+ const choose=language=>{
+   if(language!=='en'&&language!=='zh')return;
+   // Re-clicking the same choice does not restart a completed wait; a changed choice does.
+   const changed=chosen!==language;chosen=language;
+   HLLI18n.setLanguage(language);
+   if(changed)deadline=performance.now()+3000;
+   for(const button of app.querySelectorAll('[data-entry-lang]'))button.setAttribute('aria-pressed',String(button.dataset.entryLang===chosen));
+   update();
+ };
+ for(const button of app.querySelectorAll('[data-entry-lang]'))button.onclick=()=>choose(button.dataset.entryLang);
+ const onHeader=event=>{const button=event.target.closest?.('.lang-switch [data-lang]');if(button)choose(button.getAttribute('data-lang'));};
+ document.addEventListener('click',onHeader,true);
+ const clock=setInterval(update,100);
+ const cleanup=()=>{clearInterval(clock);document.removeEventListener('click',onHeader,true);};entryLanguageCleanup=cleanup;
+ confirm.onclick=()=>{
+   if(!chosen||performance.now()<deadline)return;
+   cleanup();entryLanguageCleanup=null;onConfirm();
+ };focusHeading();
+}
+function renderEnrollment(status){
+ app.innerHTML=`<section class="sheet panel"><span class="eyebrow">HUMAN LOOP LAB</span><h2 style="margin-top:8px">欢迎参加 AI 协作任务研究</h2><p>你将监督一个 AI 助手筹备校园活动。预计约 25–35 分钟（估计值），请使用电脑，并在开始后保持当前页面打开。</p><div class="notice">研究会记录你的操作步骤、点击间隔、你在页面上的停留时间与页面可见性变化，也会记录 AI 助手执行的每一个动作。问卷与访谈回答按你填写的内容保存。你可以随时关闭页面退出，未提交的内容不会被当作已完成。所有活动资料与操作均为模拟，不会真实发布或发送。请勿填写真实个人资料。</div><p class="small">说明和练习阶段可修改语言；正式计划显示前再确认并锁定。</p><form id="enroll"><label>邀请码<input type="text" name="invite" autocomplete="off" spellcheck="false" required></label><label class="check-row"><input type="checkbox" name="consent" required><span>我已阅读说明，自愿参与本次研究。</span></label><p id="entry-note" class="feedback" role="status">${status.accepting?'输入研究者提供的邀请码，确认资格后进入任务。':'当前暂未开放参与，请等待研究者通知。'}</p><button type="submit" class="primary" data-tl="enroll-submit" ${status.accepting?'':'disabled'}>验证邀请码，进入任务 →</button></form></section>`;
  document.querySelector('#enroll').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{session=await api('enroll',{invite:new FormData(e.target).get('invite').trim(),consent:true,language:HLLI18n.getLanguage()});design=resolveDesign(session);trial=new Trial(session.cell,session.id,1,design);bindSession(session);bindTrial(trial);trial.record('ui_version',{version:UI_VERSION});intro();}catch(error){setText('entry-note',error.message==='registration_paused'?'当前参与入口已暂停，请联系研究者。':error.message==='invite_protocol_outdated'?'该邀请码属于旧版研究，无法用于本次任务，请联系研究者。':error.message==='invite_unavailable'?'邀请码不可用，请核对或联系研究者。':'邀请码不可用，请核对或联系研究者。');button.disabled=false;}};
 }
 /* ---------------------------------------------------- comprehension (v03 gate)
@@ -346,6 +394,7 @@ function planning(){
   document.querySelector('#planning-form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target),values=Object.fromEntries(f);const matched=!co||(['form','email','publish'].every((x,i)=>f.get('order'+i)===x)&&f.get('fields')==='form'&&f.get('link')==='email'&&f.get('release')==='publish');trial.record('planning_attempt',{values});if(!matched){setText('planning-feedback','请再核对依赖关系与要求的对应步骤。也可以请求 agent 完成安排。');document.querySelector('#planning-feedback').scrollIntoView({block:'nearest'});return;}preparation={mode:co?'constrained_co_planning':'review_only',responses:values,assisted:false,durationMs:performance.now()-prepStarted};finalPlan();};document.querySelector('#planning-help')?.addEventListener('click',()=>{preparation={mode:'constrained_co_planning',assisted:true,durationMs:performance.now()-prepStarted};trial.record('planning_assistance');finalPlan();});focusHeading();
 }
 function finalPlan(){
+ if(v2()&&!languageLocked()){confirmFormalLanguage();return;}
  view('final-plan','计划确认');const readStart=performance.now();let ready=false,read=false;
  // Core participants arrive here straight from the shared practice step. The standard
  // review is recorded with the same review_only preparation mode the extension's
@@ -358,7 +407,7 @@ function finalPlan(){
  // prepare response, the reading clock) must tolerate the screen already being gone.
  const update=()=>{const start=document.querySelector('#start');if(start)start.disabled=!(ready&&read);};
  const clock=setInterval(()=>{const left=Math.max(0,Math.ceil((20000-(performance.now()-readStart))/1000));const time=document.querySelector('#read-time');if(time)setText('read-time',left?`请先阅读 · ${left} 秒`:'');if(!left){clearInterval(clock);read=true;update();}},100);
- const prepare=async()=>{const retry=document.querySelector('#prepare-retry');if(retry)retry.hidden=true;const status=document.querySelector('#model-status');if(!status)return;setText('model-status','助手正在准备本次任务，请稍候。');try{const result=await api('prepare',{});trial.modelBundle=result.bundle;ready=true;if(!document.querySelector('#model-status'))return;setText('model-status','助手已准备好。阅读完计划后，可以开始。');update();}catch{if(!document.querySelector('#model-status'))return;setText('model-status','助手暂时未能完成准备。你可以重试；若仍失败，请联系研究者。');const again=document.querySelector('#prepare-retry');if(again)again.hidden=false;}};
+ const prepare=async()=>{const retry=document.querySelector('#prepare-retry');if(retry)retry.hidden=true;const status=document.querySelector('#model-status');if(!status)return;setText('model-status','助手正在准备本次任务，请稍候。');try{const result=trial.modelBundle?{bundle:trial.modelBundle}:await api('prepare',{});trial.modelBundle=result.bundle;ready=true;if(!document.querySelector('#model-status'))return;setText('model-status','助手已准备好。阅读完计划后，可以开始。');update();}catch{if(!document.querySelector('#model-status'))return;setText('model-status','助手暂时未能完成准备。你可以重试；若仍失败，请联系研究者。');const again=document.querySelector('#prepare-retry');if(again)again.hidden=false;}};
  document.querySelector('#prepare-retry').onclick=prepare;prepare();
  document.querySelector('#start').onclick=()=>{const button=document.querySelector('#start');if(button)button.disabled=true;preparation.finalPlanReadMs=performance.now()-readStart;preparation.durationMs=Math.max(preparation.durationMs||0,preparation.finalPlanReadMs);comprehensionGate();};focusHeading();
 }
@@ -582,11 +631,11 @@ async function completed(){view('done','提交回答');persist();app.innerHTML='
 // Best effort, bounded telemetry flush before submitting. A telemetry failure never
 // blocks completion: the collection counters travel with the result so a partial or
 // missing record is visible in analysis instead of looking like a complete one.
-async function withTelemetry(report){let info=null;try{telemetry.summary();info=await telemetry.flushFinal(4000);}catch{}report.telemetry={version:telemetry.version,localeInitial:HLLI18n.getInitialLanguage(),locale:HLLI18n.getLanguage(),...(info||telemetry.info())};telemetry.transition();return report;}
+async function withTelemetry(report){let info=null;try{telemetry.summary();info=await telemetry.flushFinal(4000);}catch{}report.telemetry={version:telemetry.version,localeInitial:HLLI18n.getInitialLanguage(),locale:HLLI18n.getLanguage(),languageContext:languageContext??null,...(info||telemetry.info())};telemetry.transition();return report;}
 function persist(){if(trial)try{localStorage.setItem('is6912-online-progress',JSON.stringify({id:trial.id,state:trial,stage,surveyAnswers,surveyPage,uiVersion:UI_VERSION}));}catch{if(!trial.protocolFlags.includes('storage_unavailable'))trial.protocolFlags.push('storage_unavailable');}}
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&stage==='execution'&&!trial.ended){trial.protocolFlags.push('page_hidden');trial.finish('technical_interruption');clearInterval(timer);questionnaire();}});
 // Language is a participant preference, not a factor: it is recorded as an observed
 // covariate and never pauses, restarts or otherwise changes the trial.
-document.addEventListener('hll:languagechange',event=>{telemetry.languageChange(event.detail.from,event.detail.to);});
+document.addEventListener('hll:languagechange',event=>{telemetry.languageChange(event.detail.from,event.detail.to);const current=document.getElementById('formal-language');if(current)current.textContent=event.detail.to==='en'?'English':'中文';});
 window.addEventListener('beforeunload',e=>{if(stage==='execution'&&!trial.ended){persist();e.preventDefault();e.returnValue='';}});
 setup();
