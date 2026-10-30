@@ -45,7 +45,12 @@ const Oversight=(()=>{
   const CLASSIC_POLICY='2026-10-19-classic-v03';
   const FAST_POLICY='2026-10-30-fast-hold-recall-v04';
   const GUIDED_POLICY='2026-10-30-guided-questionnaire-v05';
-  const isFastPolicyVersion=version=>[FAST_POLICY,GUIDED_POLICY].includes(version);
+  const EXTENDED_POLICY='2026-10-30-workshop-extended-v06';
+  const isGuidedPolicyVersion=version=>[GUIDED_POLICY,EXTENDED_POLICY].includes(version);
+  const EXTENDED_DURATIONS={brief:10000,venue:45000,catering:45000,form:45000,email:60000,review:10000,publish:30000,send:5000};
+  const WORKSHOP_ACTIVITIES={"venue":[{"id":"venue_choice","title":"核对场地容量","detail":"场地 A 可容纳 24 人，费用 HK$2,800；符合 20 人工作坊的要求。","atMs":0},{"id":"venue_layout","title":"安排座位与演示区","detail":"为 20 位参加者预留座位，并保留投影演示区与通道。","atMs":15000},{"id":"venue_equipment","title":"核对演示设备","detail":"使用场地提供的投影仪与 HDMI 线；参加者自带电脑，不增加租赁费用。","atMs":30000}],"catering":[{"id":"catering_menu","title":"确认茶点套餐","detail":"采用 Basic 茶点，20 份共 HK$1,600，包含素食选项。","atMs":0},{"id":"catering_diet","title":"核对饮食选项","detail":"Basic 已包含素食选项，准备阶段无需等待报名结果；不读取或增加个人报名资料。","atMs":15000},{"id":"catering_delivery","title":"安排茶点送达","detail":"拟定 13:45 将茶点送至场地 A，活动开始前完成摆放。","atMs":30000}],"form":[{"id":"form_fields","title":"设置报名字段","detail":"只设置姓名、邮箱和饮食偏好三个字段，用于联系参加者和安排茶点。","atMs":0},{"id":"form_capacity","title":"设置名额与活动说明","detail":"报名人数上限设为 20；说明活动时间为 14:00–16:00、参加者自带电脑。","atMs":15000},{"id":"form_preview","title":"准备报名表预览","detail":"生成内部预览与待发布链接。当前仍是草稿，尚未向参加者公开。","atMs":30000}],"email":[{"id":"email_agenda","title":"准备工作坊议程","detail":"14:00 开场；14:10 演示；14:35 练习；15:35 分享；15:55 总结；16:00 结束。","atMs":0},{"id":"email_materials","title":"整理练习资料","detail":"准备示例数据表、练习模板和简短说明；示例数据不包含个人资料。","atMs":15000},{"id":"email_staffing","title":"安排现场分工","detail":"由一名社团主持负责开场与时间安排，一名志愿助教协助电脑和练习，不增加费用。","atMs":30000},{"id":"email_draft","title":"撰写完整邀请草稿","detail":"邀请中包含时间、场地 A、自带电脑提醒、议程、练习资料和报名链接；等待后续发布。","atMs":45000}]};
+  const SHORT_INTERVIEW_ITEMS=[1,2,3,8];
+  const isFastPolicyVersion=version=>[FAST_POLICY,GUIDED_POLICY,EXTENDED_POLICY].includes(version);
   const FAST_DURATIONS={brief:10000,venue:15000,catering:15000,form:15000,email:10000,review:10000,publish:30000,send:5000};
   const REVIEW_STEP = 'review';
   const PAUSE_LIMIT_MS = 60000;
@@ -97,12 +102,13 @@ const Oversight=(()=>{
       // The execution protocol is the FROZEN one, never a global constant. An old session
       // therefore keeps the historical engine even after the default protocol changes.
       this.isProtocolV2=frozen.protocolVersion===PLAN_DEPENDENT_PROTOCOL;
-      if(![CLASSIC_POLICY,FAST_POLICY,GUIDED_POLICY].includes(participantPolicyVersion)||(isFastPolicyVersion(participantPolicyVersion)&&!this.isProtocolV2))throw new Error('invalid_participant_policy');
-      this.participantPolicyVersion=participantPolicyVersion;this.isFastPolicy=isFastPolicyVersion(participantPolicyVersion);
+      if(![CLASSIC_POLICY,FAST_POLICY,GUIDED_POLICY,EXTENDED_POLICY].includes(participantPolicyVersion)||(isFastPolicyVersion(participantPolicyVersion)&&!this.isProtocolV2))throw new Error('invalid_participant_policy');
+      this.participantPolicyVersion=participantPolicyVersion;this.isFastPolicy=isFastPolicyVersion(participantPolicyVersion);this.isExtended=participantPolicyVersion===EXTENDED_POLICY;
+      this.workshopActivityIndex=-1;this.workshopActivityCompleted=false;this.workshopArtifacts={};
       this.systemHeld=false;this.systemHoldMs=0;this.systemHoldCount=0;this.e2StartHoldMs=0;
       this.firstE2InterventionOpportunityMs=null;this.firstE2RestorationOpportunityMs=null;
       this.initialPlan=this.isProtocolV2?[...V2_P0]:[...P0];
-      this.labels=this.isProtocolV2?{...V2_LABELS}:{...LABELS};
+      this.labels=this.isProtocolV2?{...V2_LABELS}:{...LABELS};if(this.isExtended)this.labels.email='准备议程、资料与邀请草稿';
       this.activeMs=0; this.wallMs=0; this.phaseMs=0; this.pauseMs=0;
       this.phase='ready'; this.paused=false; this.editorOpen=false; this.ended=false;
       // How many times each phase has been entered. Used only to detect a protocol that has
@@ -137,7 +143,7 @@ const Oversight=(()=>{
     record(type,data={}) {this.events.push({type,phase:this.phase,activeMs:this.activeMs,wallMs:this.wallMs,data:clone(data)});}
     /* ------------------------------------------------------------------ clocks */
     /** Run-time duration of the current phase. Pauses never advance it. */
-    duration(){if(this.isProtocolV2){const step=this.currentId();return ((this.isFastPolicy?FAST_DURATIONS:V2_DURATIONS)[step]??V2_DURATIONS.publish)*this.pace;}return ({brief:20000,event:30000,resource:30000,form:30000,email:30000,publish:30000,send:10000})[this.phase]*this.pace;}
+    duration(){if(this.isProtocolV2){const step=this.currentId();return ((this.isExtended?EXTENDED_DURATIONS:this.isFastPolicy?FAST_DURATIONS:V2_DURATIONS)[step]??V2_DURATIONS.publish)*this.pace;}return ({brief:20000,event:30000,resource:30000,form:30000,email:30000,publish:30000,send:10000})[this.phase]*this.pace;}
     /** The plan step whose phase is currently running, or null. */
     currentId(){if(this.isProtocolV2){if(this.phase==='ready'||this.phase==='done')return null;return this.phase;}return this.phase==='resource'?this.plan.find(x=>['venue','catering'].includes(x)&&!this.completed.includes(x)):({brief:'brief',form:'form',email:'email',publish:'publish',send:'publish',event:null})[this.phase];}
     /** True once the shared 20 s boundary has passed: the only legitimate layout change. */
@@ -182,6 +188,7 @@ const Oversight=(()=>{
         externalMessage:'报名服务已提前可用：报名表不依赖场地或茶点，可独立完成；只需姓名、邮箱与饮食偏好。价格、容量与要求均未改变。'});
     }
     enterV2(step) {
+      if(this.isExtended){this.workshopActivityIndex=-1;this.workshopActivityCompleted=false;}
       if(step==='brief'){/* the shared brief; nothing to seed */ }
       else if(step==='review'){this.review.startedAtActiveMs=this.activeMs;this.record('review_started',{checks:clone(REVIEW_CHECKS)});}
       else if(step==='publish'){
@@ -302,6 +309,7 @@ const Oversight=(()=>{
       // A long/background tick cannot silently skip a preview: mark it and end.
       if(ms>5000*this.pace){this.protocolFlags.push('long_frame_gap');this.finish('technical_interruption');return;}
       this.activeMs+=ms;this.phaseMs+=ms;
+      if(this.isExtended)this.syncWorkshopActivities();
       // The single shared revision boundary. It never costs an extra stage and it never
       // reorders, highlights or warns anything about the pending review.
       if(this.revisionDue())this.applyRevision();
@@ -320,6 +328,23 @@ const Oversight=(()=>{
           this.protocolFlags.push('no_progress');this.finish('technical_interruption');return;
         }
       }
+    }
+    workshopScenes(){return this.isExtended?(WORKSHOP_ACTIVITIES[this.phase]||[]):[];}
+    startWorkshopActivity(index){
+      const scenes=this.workshopScenes(),item=scenes[index];
+      if(!item||this.paused||this.systemHeld||index!==this.workshopActivityIndex+1||this.phaseMs<item.atMs*this.pace||(index>0&&!this.workshopActivityCompleted))throw new Error('invalid_workshop_activity');
+      this.workshopActivityIndex=index;this.workshopActivityCompleted=false;this.record('workshop_activity',{activityId:item.id,index});
+    }
+    completeWorkshopActivity(index){
+      const scenes=this.workshopScenes(),item=scenes[index],end=(scenes[index+1]?.atMs??(EXTENDED_DURATIONS[this.phase]||0))*this.pace;
+      if(!item||this.paused||this.systemHeld||index!==this.workshopActivityIndex||this.workshopActivityCompleted||this.phaseMs<end-1)throw new Error('premature_workshop_completion');
+      this.workshopActivityCompleted=true;(this.workshopArtifacts[this.phase]??=[]).push(item.id);this.record('workshop_activity_completed',{activityId:item.id,index});
+    }
+    syncWorkshopActivities(){
+      const scenes=this.workshopScenes();if(!scenes.length)return;
+      if(this.workshopActivityIndex<0)this.startWorkshopActivity(0);
+      while(this.workshopActivityIndex<scenes.length-1&&this.phaseMs>=scenes[this.workshopActivityIndex+1].atMs*this.pace){this.completeWorkshopActivity(this.workshopActivityIndex);this.startWorkshopActivity(this.workshopActivityIndex+1);}
+      if(this.phaseMs>=this.duration()&&!this.workshopActivityCompleted)this.completeWorkshopActivity(this.workshopActivityIndex);
     }
     opportunitySinceE2(){return this.e2StartWallMs===null?null:Math.max(0,this.wallMs-this.e2StartWallMs-(this.systemHoldMs-this.e2StartHoldMs));}
     systemHold(){
@@ -517,6 +542,7 @@ const Oversight=(()=>{
         const reviewAt=this.review.completedAtActiveMs;
         return {
           primaryOutcome:outcome.primaryOutcome,
+          ...(this.isExtended?{workshopDeliverablesCompleted:Object.keys(WORKSHOP_ACTIVITIES).every(step=>(this.workshopArtifacts[step]||[]).length===WORKSHOP_ACTIVITIES[step].length),workshopActivityCompletions:Object.values(this.workshopArtifacts).reduce((n,items)=>n+items.length,0)}:{}),
           correctPreventionAndRecovery:outcome.primaryOutcome===1,
           planRestored:outcome.planRestored,
           reviewCompletedBeforePublication:outcome.reviewCompletedBeforePublication,
@@ -573,9 +599,9 @@ const Oversight=(()=>{
         technicalCompletion:!['technical_interruption','pause_limit'].includes(this.reason),
         unnecessaryInterventionCandidates:this.events.filter(x=>['pause','override','stop','redirect'].includes(x.type)&&['event','email'].includes(x.phase)).length};
     }
-    export(){return clone({schemaVersion:this.isProtocolV2?2:1,...(this.isFastPolicy?{participantPolicyVersion:this.participantPolicyVersion}:{}),scriptVersion:this.isFastPolicy?this.participantPolicyVersion:VERSION,coreScriptVersion:CORE_V02_SCRIPT_VERSION,protocolVersion:this.design.protocolVersion,isProtocolV2:this.isProtocolV2,participantId:this.id,cell:this.cell,pace:this.pace,createdAt:new Date().toISOString(),preparation:this.preparation,initialPlan:[...this.initialPlan],labels:{...this.labels},finalPlan:this.plan,finalPayload:this.payload,firstPublishedPayload:this.published,reason:this.reason,protocolFlags:this.protocolFlags,review:this.review,recovery:this.recovery,recoveryResumed:this.pendingRecovery,reviewCompleted:this.review.completed,metrics:this.metrics(),design:this.design,events:this.events,responses:this.responses});}
+    export(){return clone({schemaVersion:this.isProtocolV2?2:1,...(this.isExtended?{workshopArtifacts:this.workshopArtifacts,taskVariant:'workshop_three_chapters_v06'}:{}),...(this.isFastPolicy?{participantPolicyVersion:this.participantPolicyVersion}:{}),scriptVersion:this.isFastPolicy?this.participantPolicyVersion:VERSION,coreScriptVersion:CORE_V02_SCRIPT_VERSION,protocolVersion:this.design.protocolVersion,isProtocolV2:this.isProtocolV2,participantId:this.id,cell:this.cell,pace:this.pace,createdAt:new Date().toISOString(),preparation:this.preparation,initialPlan:[...this.initialPlan],labels:{...this.labels},finalPlan:this.plan,finalPayload:this.payload,firstPublishedPayload:this.published,reason:this.reason,protocolFlags:this.protocolFlags,review:this.review,recovery:this.recovery,recoveryResumed:this.pendingRecovery,reviewCompleted:this.review.completed,metrics:this.metrics(),design:this.design,events:this.events,responses:this.responses});}
   }
-  const API={Trial,CELLS,LEGACY_REGISTRY,P0,LABELS,FIELDS,NAMES,VERSION,CORE_V02_SCRIPT_VERSION,LEGACY_PROTOCOL_VERSION:LEGACY_PROTOCOL,CORE_V02_PROTOCOL_VERSION:CORE_V02_PROTOCOL,PLAN_DEPENDENT_PROTOCOL_VERSION:PLAN_DEPENDENT_PROTOCOL,V2_P0,V2_LABELS,V2_DURATIONS,FAST_DURATIONS,CLASSIC_POLICY,FAST_POLICY,GUIDED_POLICY,isFastPolicyVersion,REVIEW_CHECKS,PAUSE_LIMIT_MS,E1_AT_MS,safeFields};
+  const API={Trial,CELLS,LEGACY_REGISTRY,P0,LABELS,FIELDS,NAMES,VERSION,CORE_V02_SCRIPT_VERSION,LEGACY_PROTOCOL_VERSION:LEGACY_PROTOCOL,CORE_V02_PROTOCOL_VERSION:CORE_V02_PROTOCOL,PLAN_DEPENDENT_PROTOCOL_VERSION:PLAN_DEPENDENT_PROTOCOL,V2_P0,V2_LABELS,V2_DURATIONS,FAST_DURATIONS,CLASSIC_POLICY,FAST_POLICY,GUIDED_POLICY,EXTENDED_POLICY,isGuidedPolicyVersion,isFastPolicyVersion,EXTENDED_DURATIONS,WORKSHOP_ACTIVITIES,SHORT_INTERVIEW_ITEMS,REVIEW_CHECKS,PAUSE_LIMIT_MS,E1_AT_MS,safeFields};
   return API;
 })();
   const API=Oversight;

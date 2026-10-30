@@ -15,7 +15,7 @@
 // fallback so an old snapshot keeps rendering exactly as it did before this change.
 const {Trial,P0,LABELS,FIELDS,NAMES}=Oversight;
 const StudyDesign=window.StudyDesign;
-const UI_VERSION='2026-10-30-guided-questionnaire-v07';
+const UI_VERSION='2026-10-30-workshop-extended-v08';
 // Behavioural telemetry. Fire and forget everywhere: it never runs inside the timed
 // execution path and never blocks completion. Event ids are stable for idempotent retry.
 const telemetry=HLLTelemetry.create();
@@ -28,8 +28,11 @@ let trial=null,stage='setup',timer=null,lastTick=0,prepStarted=0,preparation={},
 // matter for an engine build that predates it, in which case the old behaviour applies.
 const v2=()=>Boolean(trial&&trial.isProtocolV2);
 const fast=()=>Boolean(trial&&trial.isFastPolicy);
-let coreSurveyLock=null,taskRecordLock=null;
-const guided=()=>participantPolicy()===Oversight.GUIDED_POLICY;
+let coreSurveyLock=null,taskRecordLock=null,lastWorkshopView=null;
+const guided=()=>Oversight.isGuidedPolicyVersion(participantPolicy());
+const extended=()=>participantPolicy()===Oversight.EXTENDED_POLICY;
+const activityById=id=>Object.values(Oversight.WORKSHOP_ACTIVITIES).flat().find(item=>item.id===id);
+const activeInterviewItems=()=>extended()?Oversight.SHORT_INTERVIEW_ITEMS:interviewQuestions.map((_,i)=>i+1);
 const replayReceipt=()=>guided()?taskRecordLock:coreSurveyLock;
 const participantPolicy=()=>session?.participantPolicyVersion||Oversight.CLASSIC_POLICY;
 const sessionPlan=()=>trial?(Array.isArray(trial.initialPlan)&&trial.initialPlan.length?trial.initialPlan:P0):P0;
@@ -80,11 +83,11 @@ function focusHeading(){const h=app.querySelector('h2');if(h){h.tabIndex=-1;h.fo
 function planHTML(){return '<ol class="plan">'+stepLabels().map(x=>`<li><span>${esc(x)}</span></li>`).join('')+'</ol>';}
 function intro(){
   view('intro','活动背景');const started=performance.now();
-  trial.record('narrative_view',{narrativeVersion:SCENARIO.version});
-  app.innerHTML=`<section class="sheet panel"><span class="eyebrow">THE SCENARIO</span><h2 class="intro-title">${esc(SCENARIO.title)}</h2><div id="scenario-story" class="story-copy">${SCENARIO.paragraphs.map(p=>`<p>${esc(p)}</p>`).join('')}</div><p class="notice">${esc(SCENARIO.note)}</p><div class="actions"><button id="story-next" class="primary" data-tl="story-next">了解如何监督 →</button><span class="small">接下来先熟悉操作，再进入任务。</span></div></section>`;
-  document.querySelector('#story-next').onclick=()=>{trial.record('narrative_complete',{narrativeVersion:SCENARIO.version,exposureMs:performance.now()-started});roleInstructions();};focusHeading();
+  trial.record('narrative_view',{narrativeVersion:extended()?'2026-10-30-workshop-story-v02':SCENARIO.version});
+  app.innerHTML=`<section class="sheet panel"><span class="eyebrow">THE SCENARIO</span><h2 class="intro-title">${esc(SCENARIO.title)}</h2><div id="scenario-story" class="story-copy">${(extended()?[...SCENARIO.paragraphs,'除了报名与邀请，你还需要让活动当天能够顺利进行：安排座位与投影设备、茶点送达、练习资料和现场分工。AI 助手会分三个连续章节处理这些事项，你继续担任负责人，按同一套要求监督。']:SCENARIO.paragraphs).map(p=>`<p>${esc(p)}</p>`).join('')}</div><p class="notice">${esc(SCENARIO.note)}</p><div class="actions"><button id="story-next" class="primary" data-tl="story-next">了解如何监督 →</button><span class="small">接下来先熟悉操作，再进入任务。</span></div></section>`;
+  document.querySelector('#story-next').onclick=()=>{trial.record('narrative_complete',{narrativeVersion:extended()?'2026-10-30-workshop-story-v02':SCENARIO.version,exposureMs:performance.now()-started});roleInstructions();};focusHeading();
 }
-function taskReference(compact=false){const finalReview=v2()?'<li class="required-rule"><strong>发布前的最终审查</strong><span>任何面向参与者的资料发布或发送之前，必须完成预算、场地容量、报名字段、活动信息四项最终审查。</span></li>':'';return `<div class="panel-heading"><h2>任务要求</h2><span class="pill">始终可查</span></div><div class="task-summary"><div><span>参与人数</span>20 人</div><div><span>活动时间</span>14–16 时</div><div><span>预算上限</span>$5,000</div></div><ul class="required-list"><li><strong>场地</strong><span>至少容纳 20 人，有投影仪。</span></li><li><strong>预算</strong><span>场地与茶点合计 ≤ HK$5,000。</span></li><li><strong>报名字段</strong><span>姓名、邮箱、饮食偏好；不得收集 HKID／身份证号码。</span></li><li><strong>邀请邮件</strong><span>活动信息准确，使用符合要求的报名链接。</span></li>${finalReview}</ul><h3 class="rules-title">候选资料${compact?' · 场地均可用于 14–16 时':''}</h3><table class="facts-table"><thead><tr><th>选项</th><th>人数 / 配置</th><th>费用</th></tr></thead><tbody><tr><td>场地 A</td><td>24 人 · 投影仪</td><td>$2,800</td></tr><tr><td>场地 B</td><td>16 人 · 投影仪</td><td>$2,200</td></tr><tr><td>Basic</td><td>20 份 · 含素食</td><td>$1,600</td></tr><tr><td>Premium</td><td>20 份 · 含素食</td><td>$2,600</td></tr></tbody></table>${compact?'':'<p class="small">场地 A、B 均可用于 14:00–16:00。所有资料均为模拟数据。</p>'}`;}
+function taskReference(compact=false){const finalReview=v2()?'<li class="required-rule"><strong>发布前的最终审查</strong><span>任何面向参与者的资料发布或发送之前，必须完成预算、场地容量、报名字段、活动信息四项最终审查。</span></li>':'';return `<div class="panel-heading"><h2>任务要求</h2><span class="pill">始终可查</span></div><div class="task-summary"><div><span>参与人数</span>20 人</div><div><span>活动时间</span>14–16 时</div><div><span>预算上限</span>$5,000</div></div><ul class="required-list"><li><strong>场地</strong><span>至少容纳 20 人，有投影仪。</span></li><li><strong>预算</strong><span>场地与茶点合计 ≤ HK$5,000。</span></li><li><strong>报名字段</strong><span>姓名、邮箱、饮食偏好；不得收集 HKID／身份证号码。</span></li><li><strong>邀请邮件</strong><span>活动信息准确，使用符合要求的报名链接。</span></li>${finalReview}${extended()?'<li><strong>现场准备</strong><span>20 个座位；场地提供投影仪和 HDMI 线；参加者自带电脑，不另收费。</span></li><li><strong>内容与分工</strong><span>活动议程覆盖 14–16 时；提供无个人资料的示例数据、模板与说明；一名主持及一名志愿助教，无额外费用。</span></li><li><strong>茶点送达</strong><span>13:45 送至场地 A，保留素食选项，配送已含在套餐费用内。</span></li>':''}</ul><h3 class="rules-title">候选资料${compact?' · 场地均可用于 14–16 时':''}</h3><table class="facts-table"><thead><tr><th>选项</th><th>人数 / 配置</th><th>费用</th></tr></thead><tbody><tr><td>场地 A</td><td>24 人 · 投影仪</td><td>$2,800</td></tr><tr><td>场地 B</td><td>16 人 · 投影仪</td><td>$2,200</td></tr><tr><td>Basic</td><td>20 份 · 含素食</td><td>$1,600</td></tr><tr><td>Premium</td><td>20 份 · 含素食</td><td>$2,600</td></tr></tbody></table>${compact?'':'<p class="small">场地 A、B 均可用于 14:00–16:00。所有资料均为模拟数据。</p>'}`;}
 let session=null;
 const api=async(path,data)=>{const response=await fetch('/api/'+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',headers:data===undefined?{}:{'Content-Type':'application/json','X-Study-Request':'1'},body:data===undefined?undefined:JSON.stringify(data)});let result;try{result=await response.json();}catch{throw new Error('connection_error');}if(!response.ok)throw new Error(result.error||'connection_error');return result;};
 // Telemetry binding is safe for new, resumed and already completed sessions: attaching is
@@ -152,7 +155,7 @@ async function setup(){
   // Everything else is still restricted to keys the live object owns, so nothing unknown
   // from storage is adopted.
   const RESTORED_WHEN_SET=['reason'];
-  trial=new Trial(session.cell,session.id,1,design,participantPolicy());bindSession(session);bindTrial(trial);for(const key of Object.keys(trial))if(Object.hasOwn(saved.state,key)&&!['design','isFastPolicy','participantPolicyVersion'].includes(key))trial[key]=saved.state[key];
+  trial=new Trial(session.cell,session.id,1,design,participantPolicy());bindSession(session);bindTrial(trial);for(const key of Object.keys(trial))if(Object.hasOwn(saved.state,key)&&!['design','isFastPolicy','isExtended','participantPolicyVersion'].includes(key))trial[key]=saved.state[key];
   for(const key of RESTORED_WHEN_SET)if(saved.state[key]!==undefined&&saved.state[key]!==null)trial[key]=saved.state[key];
   if(!trial.ended){trial.protocolFlags.push('page_reloaded');trial.finish('technical_interruption');questionnaire();}
   else if(saved.stage==='interview'){interview();}else if(saved.stage==='done'){completed();}else{view('questionnaire','任务后回答');surveyAnswers=saved.surveyAnswers||{};surveyPage=saved.surveyPage||0;surveyStep();}return;
@@ -201,7 +204,7 @@ function entryLanguageChoice(onConfirm){
 }
 function renderEnrollment(status){
  app.innerHTML=`<section class="sheet panel"><span class="eyebrow">HUMAN LOOP LAB</span><h2 style="margin-top:8px">欢迎参加 AI 协作任务研究</h2><p>你将监督一个 AI 助手筹备校园活动。预计约 25–35 分钟（估计值），请使用电脑，并在开始后保持当前页面打开。</p><div class="notice">研究会记录你的操作步骤、点击间隔、你在页面上的停留时间与页面可见性变化，也会记录 AI 助手执行的每一个动作。问卷与访谈回答按你填写的内容保存。你可以随时关闭页面退出，未提交的内容不会被当作已完成。所有活动资料与操作均为模拟，不会真实发布或发送。请勿填写真实个人资料。</div><p class="small">说明和练习阶段可修改语言；正式计划显示前再确认并锁定。</p><form id="enroll"><label>邀请码<input type="text" name="invite" autocomplete="off" spellcheck="false" required></label><label class="check-row"><input type="checkbox" name="consent" required><span>我已阅读说明，自愿参与本次研究。</span></label><p id="entry-note" class="feedback" role="status">${status.accepting?'输入研究者提供的邀请码，确认资格后进入任务。':'当前暂未开放参与，请等待研究者通知。'}</p><button type="submit" class="primary" data-tl="enroll-submit" ${status.accepting?'':'disabled'}>验证邀请码，进入任务 →</button></form></section>`;
- document.querySelector('#enroll').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{session=await api('enroll',{invite:new FormData(e.target).get('invite').trim(),consent:true,language:HLLI18n.getLanguage(),supportedParticipantPolicy:Oversight.FAST_POLICY,supportedParticipantPolicies:[Oversight.FAST_POLICY,Oversight.GUIDED_POLICY]});design=resolveDesign(session);trial=new Trial(session.cell,session.id,1,design,participantPolicy());bindSession(session);bindTrial(trial);trial.record('ui_version',{version:UI_VERSION});intro();}catch(error){setText('entry-note',error.message==='client_update_required'?'页面版本已更新，请刷新后使用同一个邀请码重试。':error.message==='registration_paused'?'当前参与入口已暂停，请联系研究者。':error.message==='invite_protocol_outdated'?'该邀请码属于旧版研究，无法用于本次任务，请联系研究者。':error.message==='invite_unavailable'?'邀请码不可用，请核对或联系研究者。':'邀请码不可用，请核对或联系研究者。');button.disabled=false;}};
+ document.querySelector('#enroll').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{session=await api('enroll',{invite:new FormData(e.target).get('invite').trim(),consent:true,language:HLLI18n.getLanguage(),supportedParticipantPolicy:Oversight.FAST_POLICY,supportedParticipantPolicies:[Oversight.FAST_POLICY,Oversight.GUIDED_POLICY,Oversight.EXTENDED_POLICY]});design=resolveDesign(session);trial=new Trial(session.cell,session.id,1,design,participantPolicy());bindSession(session);bindTrial(trial);trial.record('ui_version',{version:UI_VERSION});intro();}catch(error){setText('entry-note',error.message==='client_update_required'?'页面版本已更新，请刷新后使用同一个邀请码重试。':error.message==='registration_paused'?'当前参与入口已暂停，请联系研究者。':error.message==='invite_protocol_outdated'?'该邀请码属于旧版研究，无法用于本次任务，请联系研究者。':error.message==='invite_unavailable'?'邀请码不可用，请核对或联系研究者。':'邀请码不可用，请核对或联系研究者。');button.disabled=false;}};
 }
 /* ---------------------------------------------------- comprehension (v03 gate)
  *
@@ -381,7 +384,7 @@ function noteComprehensionToE2(){
   };
   for(const target of [preparation,trial&&trial.preparation])if(target)target.comprehensionToE2=block;
 }
-function roleInstructions(){view('intro-rules','监督说明');app.innerHTML=`<section class="sheet panel"><span class="eyebrow">YOUR ROLE</span><h2 class="intro-title">你是这场工作坊的组织者</h2><div class="intro-copy"><p>agent 将协助你安排场地、茶点、报名表和邀请邮件。<strong>你的任务是监督它的执行，并在认为有必要时介入。</strong></p><p class="hint">不需要自己完成所有操作，也不需要逐步点击批准。agent 会自动继续；它可能正确，也可能出错。</p></div><div class="instruction-cards"><div class="instruction-card"><h3>查阅要求</h3><p>执行时，任务要求和候选资料会一直显示在左侧。</p></div><div class="instruction-card"><h3>观察动作</h3><p>中间显示 agent 即将执行的内容和剩余时间。</p></div><div class="instruction-card"><h3>按需介入</h3><p>${fast()?'底栏可以暂停、调整步骤、继续或停止。':'底栏可以暂停、修改动作、调整方向、继续或停止。'}</p></div></div><h3>操作规则</h3><p class="hint">${fast()?'“调整步骤”会自动暂停。应用只安排步骤，不会立即执行；关闭窗口后仍然暂停，需点击“继续执行”。':'“修改动作”或“调整方向”会自动暂停。保存或关闭窗口后仍然暂停，需点击“继续执行”。暂停期间也有时间上限。'}</p><div class="intro-meta"><span>${fast()?'监督执行约 2 分钟，不含暂停与回答时间（估计值）':v2()?'预计约 25–35 分钟（估计值）':'预计约 20–25 分钟'}</span><span>不会发生真实报名、发布或邮件发送</span></div><p class="small">任务记录你的操作步骤、点击与停留时间，以及 AI 助手执行的每一个动作。问卷与访谈回答按你填写的内容保存。${guided()?'问卷开始时可以参考本人的任务记录，提交核心回答后进入可选访谈。':fast()?'核心问题完成时会先保存，随后进入可选复盘。':''}你可以随时关闭页面退出。请勿填写真实个人资料。</p><div class="actions"><button id="train" class="primary" data-tl="training-start">先练习一次介入 →</button></div></section>`;document.querySelector('#train').onclick=training;focusHeading();}
+function roleInstructions(){view('intro-rules','监督说明');app.innerHTML=`<section class="sheet panel"><span class="eyebrow">YOUR ROLE</span><h2 class="intro-title">你是这场工作坊的组织者</h2><div class="intro-copy"><p>agent 将协助你安排场地、茶点、报名表和邀请邮件。<strong>你的任务是监督它的执行，并在认为有必要时介入。</strong></p><p class="hint">不需要自己完成所有操作，也不需要逐步点击批准。agent 会自动继续；它可能正确，也可能出错。</p></div><div class="instruction-cards"><div class="instruction-card"><h3>查阅要求</h3><p>执行时，任务要求和候选资料会一直显示在左侧。</p></div><div class="instruction-card"><h3>观察动作</h3><p>中间显示 agent 即将执行的内容和剩余时间。</p></div><div class="instruction-card"><h3>按需介入</h3><p>${fast()?'底栏可以暂停、调整步骤、继续或停止。':'底栏可以暂停、修改动作、调整方向、继续或停止。'}</p></div></div><h3>操作规则</h3><p class="hint">${fast()?'“调整步骤”会自动暂停。应用只安排步骤，不会立即执行；关闭窗口后仍然暂停，需点击“继续执行”。':'“修改动作”或“调整方向”会自动暂停。保存或关闭窗口后仍然暂停，需点击“继续执行”。暂停期间也有时间上限。'}</p><div class="intro-meta"><span>${extended()?'整场预计 6–8 分钟，按 10 分钟内设计；执行约 4 分钟（不含中断）':fast()?'监督执行约 2 分钟，不含暂停与回答时间（估计值）':v2()?'预计约 25–35 分钟（估计值）':'预计约 20–25 分钟'}</span><span>不会发生真实报名、发布或邮件发送</span></div><p class="small">任务记录你的操作步骤、点击与停留时间，以及 AI 助手执行的每一个动作。问卷与访谈回答按你填写的内容保存。${guided()?'问卷开始时可以参考本人的任务记录，提交核心回答后进入可选访谈。':fast()?'核心问题完成时会先保存，随后进入可选复盘。':''}你可以随时关闭页面退出。请勿填写真实个人资料。</p><div class="actions"><button id="train" class="primary" data-tl="training-start">先练习一次介入 →</button></div></section>`;document.querySelector('#train').onclick=training;focusHeading();}
 function training(){if(fast())return stepPractice();view('training','操作练习');let paused=false,edited=false;
 // The exit button names the step that actually follows. In the core study that is the
 // standardized initial-plan review, never a plan the participant helped build.
@@ -472,7 +475,7 @@ function executionShell(){const high=planVisible();app.innerHTML=`<div class="wo
   document.querySelector('#pause').onclick=()=>{telemetry.decision('pause');trial.pause();renderExecution();persist();};document.querySelector('#override')?.addEventListener('click',openEditor);document.querySelector('#redirect').onclick=openRedirect;document.querySelector('#stop').onclick=()=>{telemetry.decision('stop');trial.stop();clearInterval(timer);persist();questionnaire();};document.querySelector('#resume').onclick=()=>{trial.resume();trial.record('resume_ui');renderExecution();persist();};
   for(const [id,area] of [['source-panel','source'],['trace','trace'],['plan','plan']]){const el=document.getElementById(id);el?.addEventListener('pointerenter',()=>trial.record('information_view',{area}));const scrollRegion=el?.closest('.panel');scrollRegion?.addEventListener('scroll',()=>trial.record('panel_scroll',{area,scrollTop:scrollRegion.scrollTop}),{passive:true});}
 }
-function actionHTML(){const p=trial.payload;const fields=p.fields.map(x=>`<span>${NAMES[x]}</span>`).join('');
+function actionHTML(){if(extended()&&trial.workshopScenes().length)return extendedActionHTML();const p=trial.payload;const fields=p.fields.map(x=>`<span>${NAMES[x]}</span>`).join('');
   // The review step is an ORDINARY scripted action: no alarm styling, no special colour,
   // nothing that marks it as the answer to the manipulation. It is rendered exactly like
   // every other step preview.
@@ -484,6 +487,11 @@ function actionHTML(){const p=trial.payload;const fields=p.fields.map(x=>`<span>
   if(trial.phase==='email')return `<h3 class="action-title">生成并检查邀请邮件</h3><p class="action-subtitle">agent 准备使用以下活动信息。</p><div class="preview-card"><dl><dt>主题</dt><dd>邀请：20 人工作坊</dd><dt>时间与地点</dt><dd>14:00–16:00 · 场地 ${p.venue}</dd><dt>报名链接</dt><dd>模拟报名表</dd></dl></div>`;
   if(trial.phase==='publish')return `<h3 class="action-title">发布报名表</h3><p class="action-subtitle">agent 即将发布以下内容，随后发送工作坊邀请。</p><div class="preview-card"><div class="preview-label">待发布字段</div><div class="field-tags">${fields}</div><p class="small">发布后，邀请邮件将指向这份报名表。</p></div>`;
   return '<h3 class="action-title">发送邀请邮件</h3><p class="action-subtitle">报名表已发布，agent 准备发送邀请。</p><div class="preview-card"><p>20 人工作坊 · 14:00–16:00 · 模拟报名链接</p></div>';
+}
+function extendedActionHTML(){
+ const scenes=trial.workshopScenes(),index=Math.max(0,trial.workshopActivityIndex),item=scenes[index];
+ const chapter=trial.phase==='email'?'现场与内容准备':'资源与报名准备';
+ return `<p class="eyebrow">${chapter}</p><h3 class="action-title">${esc(item.title)}</h3><p class="action-subtitle"><span>${esc(stepLabel(trial.phase))}</span><span translate="no"> · </span><span translate="no">${index+1}/${scenes.length}</span></p><div class="preview-card"><div class="preview-label">当前细项</div><p>${esc(item.detail)}</p></div><p class="small">本页只展示正在处理的内容。助手会继续执行，无需逐项批准。</p>`;
 }
 // One plan renderer for BOTH the pre-run review and the live panel, so a row can never
 // acquire different markup in the two places. Rows keep their index for their whole life:
@@ -509,6 +517,7 @@ function revisionNotice(){
 }
 function renderExecution(){
   if(stage!=='execution'||trial.ended)return;
+  if(extended()&&trial.workshopScenes().length){const item=trial.workshopScenes()[Math.max(0,trial.workshopActivityIndex)];if(lastWorkshopView!==item.id){lastWorkshopView=item.id;trial.record('workshop_activity_view',{activityId:item.id,visible:!document.hidden&&!trial.systemHeld,focused:document.hasFocus()});}}
   // The first E2 render is the only place a comprehension→E2 gap is computed, and only on
   // this page stream. Never a cross-clock subtraction, never an invented value.
   if(trial.e2Start!==null&&trial.e2Start!==undefined)noteComprehensionToE2();
@@ -534,7 +543,8 @@ function renderExecution(){
   const resumeButton=document.querySelector('#resume');if(resumeButton)resumeButton.disabled=!trial.paused||trial.editorOpen;
   const historyPanel=document.querySelector('.trace-panel');
   const followHistory=historyPanel&&historyPanel.scrollTop+historyPanel.clientHeight>=historyPanel.scrollHeight-12;
-  const history=trial.trace.length?trial.trace.map(x=>`<li>${esc(x)}</li>`).join(''):'<li>尚无已完成动作。</li>';
+  const historyItems=extended()?trial.events.filter(e=>e.type==='workshop_activity_completed'||e.type==='public_step_completed').map(e=>e.type==='workshop_activity_completed'?activityById(e.data.activityId)?.title:stepLabel(e.data.step)):trial.trace;
+  const history=historyItems.length?historyItems.map(x=>`<li>${esc(x)}</li>`).join(''):'<li>尚无已完成动作。</li>';
   if(setHTML('trace',history)&&followHistory){telemetry.markAutoScroll('trace');historyPanel.scrollTop=historyPanel.scrollHeight;}
   setText('revision',revisionNotice());
   // The plan list is rebuilt from the plan array, so a row keeps its index; `review` is
@@ -668,7 +678,7 @@ function guidedSurveyStep(){
  app.innerHTML=`<section class="sheet panel"><div class="survey-top"><h2>${surveyPage===0?'计划与参与体验':'监督体验'}</h2><span class="pill">${surveyPage+1} / 2</span></div><p class="hint">你可以从本页开始参考任务记录。请按执行时的体验作答，不确定时如实选择。</p><div class="scale-labels"><span>1 · 非常不同意</span><span>7 · 非常同意</span></div><form id="survey">${surveyPage===0?checks:experienceChecks().map(x=>rating(...x)).join('')}<div class="actions">${surveyPage?'<button type="button" id="survey-back">← 上一部分</button>':''}<button type="submit" class="primary">${surveyPage?'保存回答，进入访谈 →':'保存，下一部分 →'}</button></div><p id="core-lock-feedback" class="feedback" role="status"></p></form></section>`;
  const form=document.querySelector('#survey');
  for(const [key,value] of Object.entries(surveyAnswers))for(const el of form.querySelectorAll(`[name="${key}"]`))if(el.type==='radio')el.checked=el.value===value;else el.value=value;
- const save=()=>{Object.assign(surveyAnswers,Object.fromEntries(new FormData(form)));trial.responses={...(trial.responses||{}),surveyDraft:surveyAnswers,revisionVisibilityApplicable:revised,recordAssistedCore:true,questionnaireMode:'record_assisted_v05'};persist();};
+ const save=()=>{Object.assign(surveyAnswers,Object.fromEntries(new FormData(form)));trial.responses={...(trial.responses||{}),surveyDraft:surveyAnswers,revisionVisibilityApplicable:revised,recordAssistedCore:true,questionnaireMode:extended()?'record_assisted_workshop_v06':'record_assisted_v05'};persist();};
  form.oninput=save;form.onsubmit=e=>{e.preventDefault();save();trial.record('survey_part_complete',{part:surveyPage+1});if(!surveyPage){surveyPage=1;guidedSurveyStep();}else{trial.responses.survey={...surveyAnswers};trial.record('survey_complete');persist();sealCoreSurvey();}};
  document.querySelector('#survey-back')?.addEventListener('click',()=>{save();surveyPage=0;guidedSurveyStep();});attachReplay();persist();focusHeading();
 }
@@ -688,11 +698,11 @@ async function sealCoreSurvey(){
  try{coreSurveyLock=await api('core-survey',trial.export());await interview();}
  catch{if(button)button.disabled=false;let note=document.querySelector('#core-lock-feedback');if(!note){note=document.createElement('p');note.id='core-lock-feedback';note.className='feedback';document.querySelector('#survey').append(note);}setText('core-lock-feedback','核心回答尚未保存成功。当前回答已保留，请再次点击提交重试。');}
 }
-const replayKindLabels={preview:'Agent 开始动作预览',completed:'Agent 已执行步骤',service_update:'收到服务资料更新',paused:'你主动暂停',opened_editor:'你打开步骤安排',scheduled:'你应用了步骤安排（尚未执行）',resumed:'你继续执行',not_applied:'这次安排未应用',selected:'你选择了步骤',cancelled:'你关闭步骤安排',hidden:'页面离开，系统挂起',returned:'返回页面，等待确认',continued:'你确认返回任务',published:'Agent 已发布报名表',ended:'本次执行已结束'};
+const replayKindLabels={activity_preview:'Agent 正在处理细项',activity_completed:'Agent 已完成细项',preview:'Agent 开始动作预览',completed:'Agent 已执行步骤',service_update:'收到服务资料更新',paused:'你主动暂停',opened_editor:'你打开步骤安排',scheduled:'你应用了步骤安排（尚未执行）',resumed:'你继续执行',not_applied:'这次安排未应用',selected:'你选择了步骤',cancelled:'你关闭步骤安排',hidden:'页面离开，系统挂起',returned:'返回页面，等待确认',continued:'你确认返回任务',published:'Agent 已发布报名表',ended:'本次执行已结束'};
 function renderReplay(filter='all'){
  const host=document.querySelector('#replay-events');if(!host||!replayReceipt()?.locked)return;
  const rows=replayReceipt().timeline.filter(row=>filter==='all'||row.category===filter);
- setHTML('replay-events',rows.map(row=>`<li><button type="button" class="replay-row" data-replay-index="${row.index}"><span class="small"><span>运行秒数</span> <b translate="no">${Math.round(row.activeMs/1000)}</b> · <span>实际秒数</span> <b translate="no">${Math.round(row.wallMs/1000)}</b></span><span>${esc(replayKindLabels[row.kind])}</span>${row.step&&row.kind!=='service_update'?`<strong>${esc(stepLabel(row.step))}</strong>`:''}</button></li>`).join(''));
+ setHTML('replay-events',rows.map(row=>`<li><button type="button" class="replay-row" data-replay-index="${row.index}"><span class="small"><span>运行秒数</span> <b translate="no">${Math.round(row.activeMs/1000)}</b> · <span>实际秒数</span> <b translate="no">${Math.round(row.wallMs/1000)}</b></span><span>${esc(replayKindLabels[row.kind])}</span>${row.activityId?`<strong>${esc(activityById(row.activityId)?.title||'')}</strong><span class="hint">${esc(activityById(row.activityId)?.detail||'')}</span>`:''}${row.step&&row.kind!=='service_update'&&!row.activityId?`<strong>${esc(stepLabel(row.step))}</strong>`:''}</button></li>`).join(''));
  for(const button of host.querySelectorAll('[data-replay-index]'))button.onclick=()=>{trial.record('replay_item_view',{index:Number(button.dataset.replayIndex)});for(const row of host.querySelectorAll('button'))row.classList.toggle('selected',row===button);};
 }
 async function interview(){
@@ -702,7 +712,7 @@ async function interview(){
  }
  renderInterview();
 }
-function renderInterview(){view('interview','访谈记录');app.innerHTML=`<section class="sheet panel"><span class="eyebrow">YOUR EXPERIENCE</span><h2 style="margin-top:8px">分享你的想法</h2><p class="hint">以下回答为可选内容。请描述你自己的体验；没有注意到或不确定也可以直接说。</p><form id="interview">${interviewQuestions.map((q,i)=>`<label>${i+1}. ${interviewQuestion(i)}<textarea name="q${i+1}"></textarea></label>`).join('')}<div class="actions"><button class="primary" type="submit" data-tl="interview-submit">提交回答 →</button></div></form></section>`;document.querySelector('#interview').onsubmit=e=>{e.preventDefault();trial.responses.interview=Object.fromEntries(new FormData(e.target));trial.record('interview_complete');persist();completed();};if(fast())attachReplay();focusHeading();}
+function renderInterview(){view('interview','访谈记录');app.innerHTML=`<section class="sheet panel"><span class="eyebrow">YOUR EXPERIENCE</span><h2 style="margin-top:8px">分享你的想法</h2><p class="hint">${extended()?'以下 4 题均为可选，预计 1 分钟左右；可以留空直接提交。':'以下回答为可选内容。请描述你自己的体验；没有注意到或不确定也可以直接说。'}</p><form id="interview">${activeInterviewItems().map((id,index)=>`<label data-question-id="${id}">${index+1}. ${interviewQuestion(id-1)}<textarea name="q${id}"></textarea></label>`).join('')}<div class="actions"><button class="primary" type="submit" data-tl="interview-submit">提交回答 →</button></div></form></section>`;document.querySelector('#interview').onsubmit=e=>{e.preventDefault();trial.responses.interview=Object.fromEntries(new FormData(e.target));trial.record('interview_complete');persist();completed();};if(fast())attachReplay();focusHeading();}
 function attachReplay(){
  const sheet=app.firstElementChild;sheet.classList.add('replay-questions');const grid=document.createElement('div');grid.className='post-task-layout';app.replaceChildren(grid);grid.append(sheet);
  const side=document.createElement('aside');side.className='panel replay-panel'+(guided()?' expanded':'');side.id='replay-panel';HLLI18n.bindHTML(side,`<div class="replay-heading"><h2>你的操作回放</h2><button type="button" class="replay-toggle" id="replay-toggle" aria-expanded="${guided()?'true':'false'}" aria-controls="replay-content">${guided()?'收起回放':'展开回放'}</button></div><div class="replay-content" id="replay-content"><p class="hint">${guided()?'参考实际记录回答；请区分当时注意到的信息和现在查看记录后才发现的信息。记录不提供对错评分。':'核心回答已保存。以下仅显示实际记录的动作与操作，不是建议顺序或对错评分。'}</p><label>查看记录<select id="replay-filter"><option value="all">全部记录</option><option value="agent">Agent 动作</option><option value="participant">我的干预</option><option value="result">执行结果</option><option value="system">系统挂起</option></select></label><ol id="replay-events" class="replay-events"></ol></div>`);grid.append(side);renderReplay();trial.record('replay_open');
@@ -710,7 +720,7 @@ function attachReplay(){
  document.querySelector('#replay-toggle').onclick=()=>{const open=side.classList.toggle('expanded');document.querySelector('#replay-toggle').setAttribute('aria-expanded',String(open));setText('replay-toggle',open?'收起回放':'展开回放');};
  document.querySelector('#replay-filter').onchange=e=>{trial.record('replay_filter',{filter:e.target.value});renderReplay(e.target.value);};
  const anchors=['可参考整个执行过程。','可以筛选“我的干预”，定位自己决定操作的片段。','可参考服务资料更新后的动作；请区分当时已注意到和现在看记录才想起。','可以结合更新后的动作与自己的操作回答。','可参考场地、茶点和报名表的实际执行先后。','这一题仍按你最初审阅计划时的体验回答；不记得也可以说明。','可参考发布前后实际发生的步骤。','可以筛选自己的步骤选择、应用、取消与继续操作。','请说出你自己的判断，不必寻找标准答案。','可以指出一个具体片段或控件。'];
- for(const [i,label] of sheet.querySelectorAll('#interview label').entries()){const hint=document.createElement('p');hint.className='hint question-anchor';HLLI18n.bindText(hint,anchors[i]);label.insertBefore(hint,label.querySelector('textarea'));}
+ for(const [i,label] of sheet.querySelectorAll('#interview label').entries()){const hint=document.createElement('p');hint.className='hint question-anchor';HLLI18n.bindText(hint,anchors[Number(label.dataset.questionId||i+1)-1]);label.insertBefore(hint,label.querySelector('textarea'));}
  persist();
 }
 function thankYou(receipt){view('done','已完成');app.innerHTML=`<section class="sheet panel"><span class="eyebrow">SESSION COMPLETE</span><h2 style="margin-top:8px">感谢你的参与</h2><p>你的回答已经收到。本次测试已完成，可以关闭页面。</p><p class="small">提交编号：${esc(receipt)}</p><p class="hint">如有后续问题，请联系向你发送邀请码的研究者。</p></section>`;}

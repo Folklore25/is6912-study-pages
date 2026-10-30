@@ -22,7 +22,7 @@
 (function (root) {
   'use strict';
 
-  var VERSION = '2026-10-30-telemetry-v04';
+  var VERSION = '2026-10-30-telemetry-v05';
   var ENDPOINT = '/api/events';
   var MAX_QUEUE = 400;
   var MAX_BATCH_EVENTS = 50;
@@ -525,6 +525,9 @@
       system_hold:function(data){return ['system_hold',{participantPaused:Boolean(data.participantPaused)}];},
       system_return:function(){return ['system_return',{}];},
       system_release:function(data){return ['system_release',{heldMs:Number(data.heldMs)||0}];},
+      workshop_activity_view:function(data){return ['workshop_activity_view',{activityId:data.activityId,visible:data.visible,focused:data.focused}];},
+      workshop_activity:function(data){return ['workshop_activity',{activityId:data.activityId,index:data.index}];},
+      workshop_activity_completed:function(data){return ['workshop_activity_completed',{activityId:data.activityId,index:data.index}];},
       public_step_completed:function(data){return ['public_step_completed',{stepId:data.step}];},
       direction_selection:function(data){return ['direction_selection',{stepId:data.step}];},
       replay_open:function(){return ['replay_open',{}];},
