@@ -15,7 +15,7 @@
 // fallback so an old snapshot keeps rendering exactly as it did before this change.
 const {Trial,P0,LABELS,FIELDS,NAMES}=Oversight;
 const StudyDesign=window.StudyDesign;
-const UI_VERSION='2026-10-30-closed-questionnaire-v09';
+const UI_VERSION='2026-10-30-reading15-publish15-v10';
 // Behavioural telemetry. Fire and forget everywhere: it never runs inside the timed
 // execution path and never blocks completion. Event ids are stable for idempotent retry.
 const telemetry=HLLTelemetry.create();
@@ -31,7 +31,7 @@ const fast=()=>Boolean(trial&&trial.isFastPolicy);
 let coreSurveyLock=null,taskRecordLock=null,lastWorkshopView=null;
 const guided=()=>Oversight.isGuidedPolicyVersion(participantPolicy());
 const extended=()=>Oversight.isExtendedPolicyVersion(participantPolicy());
-const structured=()=>participantPolicy()===Oversight.CLOSED_POLICY;
+const structured=()=>Oversight.isClosedPolicyVersion(participantPolicy());
 const activityById=id=>Object.values(Oversight.WORKSHOP_ACTIVITIES).flat().find(item=>item.id===id);
 const activeInterviewItems=()=>extended()?Oversight.SHORT_INTERVIEW_ITEMS:interviewQuestions.map((_,i)=>i+1);
 const replayReceipt=()=>guided()?taskRecordLock:coreSurveyLock;
@@ -205,7 +205,7 @@ function entryLanguageChoice(onConfirm){
 }
 function renderEnrollment(status){
  app.innerHTML=`<section class="sheet panel"><span class="eyebrow">HUMAN LOOP LAB</span><h2 style="margin-top:8px">欢迎参加 AI 协作任务研究</h2><p>你将监督一个 AI 助手筹备校园活动。预计约 25–35 分钟（估计值），请使用电脑，并在开始后保持当前页面打开。</p><div class="notice">研究会记录你的操作步骤、点击间隔、你在页面上的停留时间与页面可见性变化，也会记录 AI 助手执行的每一个动作。问卷与访谈回答按你填写的内容保存。你可以随时关闭页面退出，未提交的内容不会被当作已完成。所有活动资料与操作均为模拟，不会真实发布或发送。请勿填写真实个人资料。</div><p class="small">说明和练习阶段可修改语言；正式计划显示前再确认并锁定。</p><form id="enroll"><label>邀请码<input type="text" name="invite" autocomplete="off" spellcheck="false" required></label><label class="check-row"><input type="checkbox" name="consent" required><span>我已阅读说明，自愿参与本次研究。</span></label><p id="entry-note" class="feedback" role="status">${status.accepting?'输入研究者提供的邀请码，确认资格后进入任务。':'当前暂未开放参与，请等待研究者通知。'}</p><button type="submit" class="primary" data-tl="enroll-submit" ${status.accepting?'':'disabled'}>验证邀请码，进入任务 →</button></form></section>`;
- document.querySelector('#enroll').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{session=await api('enroll',{invite:new FormData(e.target).get('invite').trim(),consent:true,language:HLLI18n.getLanguage(),supportedParticipantPolicy:Oversight.FAST_POLICY,supportedParticipantPolicies:[Oversight.FAST_POLICY,Oversight.GUIDED_POLICY,Oversight.EXTENDED_POLICY,Oversight.CLOSED_POLICY]});design=resolveDesign(session);trial=new Trial(session.cell,session.id,1,design,participantPolicy());bindSession(session);bindTrial(trial);trial.record('ui_version',{version:UI_VERSION});intro();}catch(error){setText('entry-note',error.message==='client_update_required'?'页面版本已更新，请刷新后使用同一个邀请码重试。':error.message==='registration_paused'?'当前参与入口已暂停，请联系研究者。':error.message==='invite_protocol_outdated'?'该邀请码属于旧版研究，无法用于本次任务，请联系研究者。':error.message==='invite_unavailable'?'邀请码不可用，请核对或联系研究者。':'邀请码不可用，请核对或联系研究者。');button.disabled=false;}};
+ document.querySelector('#enroll').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{session=await api('enroll',{invite:new FormData(e.target).get('invite').trim(),consent:true,language:HLLI18n.getLanguage(),supportedParticipantPolicy:Oversight.FAST_POLICY,supportedParticipantPolicies:[Oversight.FAST_POLICY,Oversight.GUIDED_POLICY,Oversight.EXTENDED_POLICY,Oversight.CLOSED_POLICY,Oversight.TIMED_POLICY]});design=resolveDesign(session);trial=new Trial(session.cell,session.id,1,design,participantPolicy());bindSession(session);bindTrial(trial);trial.record('ui_version',{version:UI_VERSION});intro();}catch(error){setText('entry-note',error.message==='client_update_required'?'页面版本已更新，请刷新后使用同一个邀请码重试。':error.message==='registration_paused'?'当前参与入口已暂停，请联系研究者。':error.message==='invite_protocol_outdated'?'该邀请码属于旧版研究，无法用于本次任务，请联系研究者。':error.message==='invite_unavailable'?'邀请码不可用，请核对或联系研究者。':'邀请码不可用，请核对或联系研究者。');button.disabled=false;}};
 }
 /* ---------------------------------------------------- comprehension (v03 gate)
  *
@@ -429,7 +429,7 @@ function finalPlan(){
  const update=()=>{const start=document.querySelector('#start');if(start)start.disabled=!(ready&&read);};
  const sampleRead=()=>{const now=performance.now();if(readWasVisible)readVisibleMs+=now-readLast;readLast=now;readWasVisible=!document.hidden;};
  document.addEventListener('visibilitychange',sampleRead);
- const clock=setInterval(()=>{if(stage!=='final-plan'){clearInterval(clock);document.removeEventListener('visibilitychange',sampleRead);return;}sampleRead();const left=Math.max(0,Math.ceil(((guided()?5000:20000)-(fast()?readVisibleMs:performance.now()-readStart))/1000));const time=document.querySelector('#read-time');if(time)setText('read-time',left?`请先阅读 · ${left} 秒`:'');if(!left){clearInterval(clock);document.removeEventListener('visibilitychange',sampleRead);read=true;update();}},100);
+ const clock=setInterval(()=>{if(stage!=='final-plan'){clearInterval(clock);document.removeEventListener('visibilitychange',sampleRead);return;}sampleRead();const left=Math.max(0,Math.ceil((Oversight.minimumPlanReadMs(participantPolicy())-(fast()?readVisibleMs:performance.now()-readStart))/1000));const time=document.querySelector('#read-time');if(time)setText('read-time',left?`请先阅读 · ${left} 秒`:'');if(!left){clearInterval(clock);document.removeEventListener('visibilitychange',sampleRead);read=true;update();}},100);
  const prepare=async()=>{const retry=document.querySelector('#prepare-retry');if(retry)retry.hidden=true;const status=document.querySelector('#model-status');if(!status)return;setText('model-status','助手正在准备本次任务，请稍候。');try{const result=trial.modelBundle?{bundle:trial.modelBundle}:await api('prepare',{});trial.modelBundle=result.bundle;ready=true;if(!document.querySelector('#model-status'))return;setText('model-status','助手已准备好。阅读完计划后，可以开始。');update();}catch{if(!document.querySelector('#model-status'))return;setText('model-status','助手暂时未能完成准备。你可以重试；若仍失败，请联系研究者。');const again=document.querySelector('#prepare-retry');if(again)again.hidden=false;}};
  document.querySelector('#prepare-retry').onclick=prepare;prepare();
  document.querySelector('#start').onclick=()=>{const button=document.querySelector('#start');if(button)button.disabled=true;preparation.finalPlanReadMs=fast()?readVisibleMs:performance.now()-readStart;if(fast()){preparation.finalPlanVisibleMs=readVisibleMs;preparation.finalPlanWallMs=performance.now()-readStart;}preparation.durationMs=Math.max(preparation.durationMs||0,preparation.finalPlanReadMs);comprehensionGate();};focusHeading();
