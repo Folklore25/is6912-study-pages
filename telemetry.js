@@ -536,6 +536,7 @@
       replay_item_view:function(data){return ['replay_item_view',{index:data.index}];},
       survey_part_complete: function (data) { return ['survey_page', { part: Number(data.part) || 1, complete: false }]; },
       survey_complete: function () { return ['survey_page', { part: 4, complete: true }]; },
+      structured_followup_complete:function(data){return ['structured_followup_complete',{schemaVersion:data.schemaVersion,answeredCount:data.answeredCount,skipped:data.skipped}];},
       interview_complete: function () { return ['interview_complete', { questions: document.querySelectorAll('#interview textarea').length }]; },
       narrative_complete: function (data) { return ['narrative_complete', { exposureMs: Math.max(0, Math.round(Number(data.exposureMs) || 0)) }]; },
       information_view: function (data) { return ['panel_view', { area: data.area }]; },
@@ -653,7 +654,7 @@
     }
 
     function isSurveyField(element) {
-      return Boolean(element && element.name && element.closest && element.closest('#survey,#interview'));
+      return Boolean(element && element.name && element.closest && element.closest('#survey,#interview,#structured-followup'));
     }
     function onFieldFocus(event) {
       var element = event.target;

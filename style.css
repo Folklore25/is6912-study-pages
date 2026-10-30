@@ -57,3 +57,5 @@ body.system-held #app,body.system-held #direction,body.system-held #editor{visib
 
 .replay-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.replay-toggle{display:none}
 @media(max-width:900px){.post-task-layout>.replay-panel{order:-1;position:sticky;top:80px;z-index:4;max-height:60vh}.replay-toggle{display:inline-flex;min-height:44px}.replay-panel:not(.expanded) .replay-content{display:none}}
+
+.rating-extra{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.rating-extra label{display:flex;align-items:center;gap:7px;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;margin:0;font-weight:400;cursor:pointer}.rating-extra input{margin:0}.rating-extra label:has(input:checked){background:var(--accent-soft);border-color:var(--accent)}
