@@ -44,6 +44,8 @@ const Oversight=(()=>{
   const E1_AT_MS = 20000;
   const CLASSIC_POLICY='2026-10-19-classic-v03';
   const FAST_POLICY='2026-10-30-fast-hold-recall-v04';
+  const GUIDED_POLICY='2026-10-30-guided-questionnaire-v05';
+  const isFastPolicyVersion=version=>[FAST_POLICY,GUIDED_POLICY].includes(version);
   const FAST_DURATIONS={brief:10000,venue:15000,catering:15000,form:15000,email:10000,review:10000,publish:30000,send:5000};
   const REVIEW_STEP = 'review';
   const PAUSE_LIMIT_MS = 60000;
@@ -95,8 +97,8 @@ const Oversight=(()=>{
       // The execution protocol is the FROZEN one, never a global constant. An old session
       // therefore keeps the historical engine even after the default protocol changes.
       this.isProtocolV2=frozen.protocolVersion===PLAN_DEPENDENT_PROTOCOL;
-      if(![CLASSIC_POLICY,FAST_POLICY].includes(participantPolicyVersion)||(participantPolicyVersion===FAST_POLICY&&!this.isProtocolV2))throw new Error('invalid_participant_policy');
-      this.participantPolicyVersion=participantPolicyVersion;this.isFastPolicy=participantPolicyVersion===FAST_POLICY;
+      if(![CLASSIC_POLICY,FAST_POLICY,GUIDED_POLICY].includes(participantPolicyVersion)||(isFastPolicyVersion(participantPolicyVersion)&&!this.isProtocolV2))throw new Error('invalid_participant_policy');
+      this.participantPolicyVersion=participantPolicyVersion;this.isFastPolicy=isFastPolicyVersion(participantPolicyVersion);
       this.systemHeld=false;this.systemHoldMs=0;this.systemHoldCount=0;this.e2StartHoldMs=0;
       this.firstE2InterventionOpportunityMs=null;this.firstE2RestorationOpportunityMs=null;
       this.initialPlan=this.isProtocolV2?[...V2_P0]:[...P0];
@@ -130,7 +132,7 @@ const Oversight=(()=>{
        * @type {{initial?:string[],revision?:string[]}|null}
        */
       this.modelBundle=null;
-      this.record('configured',{cell,pace,scriptVersion:this.isFastPolicy?FAST_POLICY:VERSION,protocolVersion:this.design.protocolVersion,designKind:this.design.designKind,conditionId:this.design.conditionId,isProtocolV2:this.isProtocolV2});
+      this.record('configured',{cell,pace,scriptVersion:this.isFastPolicy?this.participantPolicyVersion:VERSION,protocolVersion:this.design.protocolVersion,designKind:this.design.designKind,conditionId:this.design.conditionId,isProtocolV2:this.isProtocolV2});
     }
     record(type,data={}) {this.events.push({type,phase:this.phase,activeMs:this.activeMs,wallMs:this.wallMs,data:clone(data)});}
     /* ------------------------------------------------------------------ clocks */
@@ -571,9 +573,9 @@ const Oversight=(()=>{
         technicalCompletion:!['technical_interruption','pause_limit'].includes(this.reason),
         unnecessaryInterventionCandidates:this.events.filter(x=>['pause','override','stop','redirect'].includes(x.type)&&['event','email'].includes(x.phase)).length};
     }
-    export(){return clone({schemaVersion:this.isProtocolV2?2:1,...(this.isFastPolicy?{participantPolicyVersion:this.participantPolicyVersion}:{}),scriptVersion:this.isFastPolicy?FAST_POLICY:VERSION,coreScriptVersion:CORE_V02_SCRIPT_VERSION,protocolVersion:this.design.protocolVersion,isProtocolV2:this.isProtocolV2,participantId:this.id,cell:this.cell,pace:this.pace,createdAt:new Date().toISOString(),preparation:this.preparation,initialPlan:[...this.initialPlan],labels:{...this.labels},finalPlan:this.plan,finalPayload:this.payload,firstPublishedPayload:this.published,reason:this.reason,protocolFlags:this.protocolFlags,review:this.review,recovery:this.recovery,recoveryResumed:this.pendingRecovery,reviewCompleted:this.review.completed,metrics:this.metrics(),design:this.design,events:this.events,responses:this.responses});}
+    export(){return clone({schemaVersion:this.isProtocolV2?2:1,...(this.isFastPolicy?{participantPolicyVersion:this.participantPolicyVersion}:{}),scriptVersion:this.isFastPolicy?this.participantPolicyVersion:VERSION,coreScriptVersion:CORE_V02_SCRIPT_VERSION,protocolVersion:this.design.protocolVersion,isProtocolV2:this.isProtocolV2,participantId:this.id,cell:this.cell,pace:this.pace,createdAt:new Date().toISOString(),preparation:this.preparation,initialPlan:[...this.initialPlan],labels:{...this.labels},finalPlan:this.plan,finalPayload:this.payload,firstPublishedPayload:this.published,reason:this.reason,protocolFlags:this.protocolFlags,review:this.review,recovery:this.recovery,recoveryResumed:this.pendingRecovery,reviewCompleted:this.review.completed,metrics:this.metrics(),design:this.design,events:this.events,responses:this.responses});}
   }
-  const API={Trial,CELLS,LEGACY_REGISTRY,P0,LABELS,FIELDS,NAMES,VERSION,CORE_V02_SCRIPT_VERSION,LEGACY_PROTOCOL_VERSION:LEGACY_PROTOCOL,CORE_V02_PROTOCOL_VERSION:CORE_V02_PROTOCOL,PLAN_DEPENDENT_PROTOCOL_VERSION:PLAN_DEPENDENT_PROTOCOL,V2_P0,V2_LABELS,V2_DURATIONS,FAST_DURATIONS,CLASSIC_POLICY,FAST_POLICY,REVIEW_CHECKS,PAUSE_LIMIT_MS,E1_AT_MS,safeFields};
+  const API={Trial,CELLS,LEGACY_REGISTRY,P0,LABELS,FIELDS,NAMES,VERSION,CORE_V02_SCRIPT_VERSION,LEGACY_PROTOCOL_VERSION:LEGACY_PROTOCOL,CORE_V02_PROTOCOL_VERSION:CORE_V02_PROTOCOL,PLAN_DEPENDENT_PROTOCOL_VERSION:PLAN_DEPENDENT_PROTOCOL,V2_P0,V2_LABELS,V2_DURATIONS,FAST_DURATIONS,CLASSIC_POLICY,FAST_POLICY,GUIDED_POLICY,isFastPolicyVersion,REVIEW_CHECKS,PAUSE_LIMIT_MS,E1_AT_MS,safeFields};
   return API;
 })();
   const API=Oversight;

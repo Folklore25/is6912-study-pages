@@ -6,4 +6,4 @@ Protocol v2 (`2026-10-19-plan-dependent-v03`) uses a scripted simulated workflow
 
 The private study-platform repository is the source of truth. This repository contains no administrator interface, server configuration, invitation secrets or research records.
 
-The current participant implementation uses a faster fixed execution schedule, independent holds when the page is hidden, explicit return confirmation, and core answers saved before an optional public action replay. Implementation policy is frozen per invitation/session; the four-condition study design is unchanged.
+The current implementation retains the faster fixed execution schedule, hidden-page holds and explicit return confirmation. After pilot usability feedback, initial-plan reading has a five-second visible minimum and the public task record is available from the first questionnaire page; unaided free recall is removed. Execution is frozen server-side before reference exposure, and assisted answers are marked separately. Existing sessions retain their frozen implementation policy.
