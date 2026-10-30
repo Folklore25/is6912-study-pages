@@ -42,6 +42,9 @@ const Oversight=(()=>{
   // Shared duration budget for every v03 step.
   const V2_DURATIONS = {brief:20000,venue:30000,catering:30000,form:30000,email:30000,review:30000,publish:30000,send:10000};
   const E1_AT_MS = 20000;
+  const CLASSIC_POLICY='2026-10-19-classic-v03';
+  const FAST_POLICY='2026-10-30-fast-hold-recall-v04';
+  const FAST_DURATIONS={brief:10000,venue:15000,catering:15000,form:15000,email:10000,review:10000,publish:30000,send:5000};
   const REVIEW_STEP = 'review';
   const PAUSE_LIMIT_MS = 60000;
   // Bound pathological repeated transitions. Normal scripted paths visit each phase
@@ -72,7 +75,7 @@ const Oversight=(()=>{
      * @param {number} [pace=1] 1 or 0.1
      * @param {import('./design.js').DesignSnapshot|null} [design=null] frozen design snapshot to attach
      */
-    constructor(cell, participantId, pace=1, design=null) {
+    constructor(cell, participantId, pace=1, design=null, participantPolicyVersion=CLASSIC_POLICY) {
       if (!isKnownCell(cell)) throw new Error('Invalid cell');
       if (!/^[A-Za-z0-9_-]{1,32}$/.test(participantId)) throw new Error('Use an anonymous ID');
       if (![1,0.1].includes(pace)) throw new Error('Invalid pace');
@@ -92,6 +95,10 @@ const Oversight=(()=>{
       // The execution protocol is the FROZEN one, never a global constant. An old session
       // therefore keeps the historical engine even after the default protocol changes.
       this.isProtocolV2=frozen.protocolVersion===PLAN_DEPENDENT_PROTOCOL;
+      if(![CLASSIC_POLICY,FAST_POLICY].includes(participantPolicyVersion)||(participantPolicyVersion===FAST_POLICY&&!this.isProtocolV2))throw new Error('invalid_participant_policy');
+      this.participantPolicyVersion=participantPolicyVersion;this.isFastPolicy=participantPolicyVersion===FAST_POLICY;
+      this.systemHeld=false;this.systemHoldMs=0;this.systemHoldCount=0;this.e2StartHoldMs=0;
+      this.firstE2InterventionOpportunityMs=null;this.firstE2RestorationOpportunityMs=null;
       this.initialPlan=this.isProtocolV2?[...V2_P0]:[...P0];
       this.labels=this.isProtocolV2?{...V2_LABELS}:{...LABELS};
       this.activeMs=0; this.wallMs=0; this.phaseMs=0; this.pauseMs=0;
@@ -107,7 +114,7 @@ const Oversight=(()=>{
       /* ------------------------------------------------------- v03 only state */
       /** @type {{completed:boolean,startedAtActiveMs:number|null,completedAtActiveMs:number|null,checks:Record<string,any>|null}} */
       this.review={completed:false,startedAtActiveMs:null,completedAtActiveMs:null,checks:null};
-      this.wallMsAtReview=null;
+      this.wallMsAtReview=null;this.systemHoldAtReview=0;
       /** The review pause the participant is currently inside (wall-clock counters included). */
       this.pauseActive=false;
       /** Saved recovery: scheduled, not started. Saving never completes the review. */
@@ -123,16 +130,16 @@ const Oversight=(()=>{
        * @type {{initial?:string[],revision?:string[]}|null}
        */
       this.modelBundle=null;
-      this.record('configured',{cell,pace,scriptVersion:VERSION,protocolVersion:this.design.protocolVersion,designKind:this.design.designKind,conditionId:this.design.conditionId,isProtocolV2:this.isProtocolV2});
+      this.record('configured',{cell,pace,scriptVersion:this.isFastPolicy?FAST_POLICY:VERSION,protocolVersion:this.design.protocolVersion,designKind:this.design.designKind,conditionId:this.design.conditionId,isProtocolV2:this.isProtocolV2});
     }
     record(type,data={}) {this.events.push({type,phase:this.phase,activeMs:this.activeMs,wallMs:this.wallMs,data:clone(data)});}
     /* ------------------------------------------------------------------ clocks */
     /** Run-time duration of the current phase. Pauses never advance it. */
-    duration(){if(this.isProtocolV2){const step=this.currentId();return (V2_DURATIONS[step]??V2_DURATIONS.publish)*this.pace;}return ({brief:20000,event:30000,resource:30000,form:30000,email:30000,publish:30000,send:10000})[this.phase]*this.pace;}
+    duration(){if(this.isProtocolV2){const step=this.currentId();return ((this.isFastPolicy?FAST_DURATIONS:V2_DURATIONS)[step]??V2_DURATIONS.publish)*this.pace;}return ({brief:20000,event:30000,resource:30000,form:30000,email:30000,publish:30000,send:10000})[this.phase]*this.pace;}
     /** The plan step whose phase is currently running, or null. */
     currentId(){if(this.isProtocolV2){if(this.phase==='ready'||this.phase==='done')return null;return this.phase;}return this.phase==='resource'?this.plan.find(x=>['venue','catering'].includes(x)&&!this.completed.includes(x)):({brief:'brief',form:'form',email:'email',publish:'publish',send:'publish',event:null})[this.phase];}
     /** True once the shared 20 s boundary has passed: the only legitimate layout change. */
-    revisionDue(){return this.isProtocolV2&&!this.revisionApplied&&this.phase==='brief'&&this.activeMs>=E1_AT_MS;}
+    revisionDue(){return this.isProtocolV2&&!this.revisionApplied&&this.phase==='brief'&&this.activeMs>=(this.isFastPolicy?10000:E1_AT_MS);}
     enter(phase) {
       // Count every entry so a protocol that stops making progress is detected rather
       // than looped on forever by the caller.
@@ -181,7 +188,7 @@ const Oversight=(()=>{
         // E2 fires EXACTLY ONCE per trial: the post-repair preview re-enters publish, but it
         // must never re-seed the observation origin, reset a clock or re-raise the event.
         const first=this.e2Start===null;
-        if(first){this.e2Start=this.activeMs;this.e2StartWallMs=this.wallMs;}
+        if(first){this.e2Start=this.activeMs;this.e2StartWallMs=this.wallMs;this.e2StartHoldMs=this.systemHoldMs;}
         this.record('seeded_payload',{payload:this.payload,event:first?'e2':'post_recovery_preview',reviewPending:!this.review.completed});
       }
       else if(step==='done'){/* terminal */ }
@@ -250,7 +257,7 @@ const Oversight=(()=>{
      */
     nextV2(){
       const step=this.currentId();
-      if(step!==null)this.completed.push(step);
+      if(step!==null){this.completed.push(step);if(this.isFastPolicy)this.record('public_step_completed',{step});}
       const done=this.completed.includes(REVIEW_STEP);
       if(step==='brief'){this.trace.push('已核对目标和约束。');this.enter(this.nextWorkStep());return;}
       if(step==='venue'){this.trace.push(`已选择场地 ${this.payload.venue}。`);this.enter(this.nextWorkStep());return;}
@@ -264,7 +271,7 @@ const Oversight=(()=>{
       }
       if(step===REVIEW_STEP){
         // Only at the real end of the review phase is the review complete.
-        this.review.completed=true;this.review.completedAtActiveMs=this.activeMs;this.wallMsAtReview=this.wallMs;
+        this.review.completed=true;this.review.completedAtActiveMs=this.activeMs;this.wallMsAtReview=this.wallMs;this.systemHoldAtReview=this.systemHoldMs;
         this.trace.push('已完成发布前最终审查：预算、容量、报名字段与活动信息。');
         this.record('review_completed',{checks:clone(REVIEW_CHECKS),activeMs:this.activeMs});
         this.enter(done?'publish':'send');return;
@@ -288,6 +295,7 @@ const Oversight=(()=>{
       if(!Number.isFinite(ms)||ms<0)throw new Error('Invalid elapsed time');
       if(this.ended||this.phase==='ready')return;
       this.wallMs+=ms;
+      if(this.systemHeld){this.systemHoldMs+=ms;return;}
       if(this.paused){this.pauseMs+=ms;if(this.pauseMs>=PAUSE_LIMIT_MS*this.pace){this.record('pause_limit');this.finish('pause_limit');}return;}
       // A long/background tick cannot silently skip a preview: mark it and end.
       if(ms>5000*this.pace){this.protocolFlags.push('long_frame_gap');this.finish('technical_interruption');return;}
@@ -311,10 +319,21 @@ const Oversight=(()=>{
         }
       }
     }
+    opportunitySinceE2(){return this.e2StartWallMs===null?null:Math.max(0,this.wallMs-this.e2StartWallMs-(this.systemHoldMs-this.e2StartHoldMs));}
+    systemHold(){
+      if(!this.isFastPolicy)throw new Error('system_hold_not_supported');
+      if(this.ended||this.phase==='ready'||this.systemHeld)return;
+      this.systemHeld=true;this.systemHoldCount++;this.record('system_hold',{participantPaused:this.paused});
+    }
+    systemReturn(){if(!this.systemHeld||this.ended)return;this.record('system_return');}
+    releaseSystemHold(){
+      if(!this.systemHeld||this.ended)return;
+      this.record('system_release',{heldMs:this.systemHoldMs});this.systemHeld=false;
+    }
     intervention(kind){
       if(this.isProtocolV2){
         if(this.currentId()==='publish'){
-          if(this.firstE2Intervention===null){this.firstE2Intervention=this.activeMs-this.e2Start;this.firstE2InterventionWall=this.wallMs-this.e2StartWallMs;}
+          if(this.firstE2Intervention===null){this.firstE2Intervention=this.activeMs-this.e2Start;this.firstE2InterventionWall=this.wallMs-this.e2StartWallMs;this.firstE2InterventionOpportunityMs=this.opportunitySinceE2();}
           // The first intervention in the preview also fixes the WALL ORIGIN the restoration
           // endpoint is measured from, so the intervention, the pause that follows it and the
           // repair are all three measured from the same E2 instant. The ACTIVE clock stays at
@@ -328,12 +347,12 @@ const Oversight=(()=>{
       this.record(kind);
     }
     pause(kind='pause'){
-      if(this.ended||this.paused||this.phase==='ready')return;
+      if(this.ended||this.paused||this.systemHeld||this.phase==='ready')return;
       this.intervention(kind);this.paused=true;this.pauseMs=0;
       if(this.isProtocolV2&&this.currentId()==='publish'&&!this.recovery.paused){this.pauseActive=true;this.recovery.paused=true;this.recovery.pausedAtActiveMs=this.activeMs-this.e2Start;this.recovery.pausedAtWallMs=this.wallMs-this.e2StartWallMs;}
     }
     resume(){
-      if(this.ended||!this.paused||this.editorOpen)return;
+      if(this.ended||!this.paused||this.editorOpen||this.systemHeld)return;
       this.record('resume');
       // A saved recovery only STARTS on an explicit resume; it is never auto-completed.
       if(this.isProtocolV2&&this.pendingRecovery){
@@ -346,7 +365,7 @@ const Oversight=(()=>{
     }
     /** The recovery step a paused participant may schedule, or null when none applies. */
     restorableStep(){
-      if(!this.isProtocolV2||this.ended||this.paused!==true)return null;
+      if(!this.isProtocolV2||this.ended||this.systemHeld||this.paused!==true)return null;
       if(this.currentId()!=='publish')return null;          // in a publish preview
       if(this.published!==null)return null;                 // before the first publication
       if(!this.completed.includes('email'))return null;      // after the email draft is done
@@ -375,12 +394,13 @@ const Oversight=(()=>{
       // x is the preview budget the participant already spent when they repaired; the
       // repaired run keeps exactly that much of the original preview for the audit.
       this.recovery.xMs=Math.max(0,Math.min(V2_DURATIONS.publish*this.pace,this.recovery.pausedAtActiveMs));
+      if(this.firstE2RestorationOpportunityMs===null)this.firstE2RestorationOpportunityMs=this.opportunitySinceE2();
       this.firstE2Restoration=restoredAtActiveMs;this.firstE2RestorationWall=restoredAtWallMs;
       this.record('recovery_scheduled',{step:allowed,activeMs:this.activeMs,xMs:this.recovery.xMs});
       return allowed;
     }
     edit(changes){
-      if(this.ended||!this.paused)throw new Error('Pause before editing');
+      if(this.ended||!this.paused||this.systemHeld)throw new Error('Pause before editing');
       if(this.isProtocolV2)return this.editV2(changes);
       const before=clone(this.payload);
       if(changes.venue!==undefined){if(!['A','B'].includes(changes.venue))throw new Error('Invalid venue');this.payload.venue=changes.venue;}
@@ -432,7 +452,7 @@ const Oversight=(()=>{
      * outcome. The UI is expected to call `edit({restoreStep})` for the direction action.
      */
     redirect(){if(this.ended)return;if(this.isProtocolV2){this.pause('redirect');this.record('safe_template_redirect',{available:false,reason:'no_template_switch_in_this_protocol'});return;}this.pause('redirect');this.edit({fields:[...FIELDS]});this.record('safe_template_redirect');}
-    stop(){if(this.ended)return;this.intervention('stop');this.finish('stopped');}
+    stop(){if(this.ended||this.systemHeld)return;this.intervention('stop');this.finish('stopped');}
     finish(reason){if(this.ended)return;this.ended=true;this.reason=reason;this.editorOpen=false;this.record('trial_end',{reason,metrics:this.metrics()});}
     /**
      * v03 outcome: four independent facts plus the single binary primary outcome.
@@ -532,6 +552,7 @@ const Oversight=(()=>{
           observationWindowWallMs:e2Wall,
           firstE2CorrectionMs:this.firstE2Restoration,
           noInterventionRightCensored:Boolean(seen&&this.firstE2Intervention===null),
+          ...(this.isFastPolicy?{participantPolicyVersion:this.participantPolicyVersion,systemHoldBeforeE2Ms:this.e2StartHoldMs,reviewCompletionOpportunityMs:reviewAt===null?null:this.wallMsAtReview-(this.interventionWallOrigin??this.e2StartWallMs)-(this.systemHoldAtReview-this.e2StartHoldMs),systemHoldMs:this.systemHoldMs,systemHoldCount:this.systemHoldCount,visibleOpportunityWallMs:this.wallMs-this.systemHoldMs,firstE2InterventionOpportunityMs:this.firstE2InterventionOpportunityMs,firstE2RestorationOpportunityMs:this.firstE2RestorationOpportunityMs}:{}),
           timingEligible:this.pace===1&&this.protocolFlags.length===0,
           technicalCompletion:!['technical_interruption','pause_limit'].includes(this.reason),
           unnecessaryInterventionCandidates:this.events.filter(x=>['pause','override','stop','redirect'].includes(x.type)&&['venue','catering','form','email'].includes(x.phase)).length,
@@ -550,9 +571,9 @@ const Oversight=(()=>{
         technicalCompletion:!['technical_interruption','pause_limit'].includes(this.reason),
         unnecessaryInterventionCandidates:this.events.filter(x=>['pause','override','stop','redirect'].includes(x.type)&&['event','email'].includes(x.phase)).length};
     }
-    export(){return clone({schemaVersion:this.isProtocolV2?2:1,scriptVersion:VERSION,coreScriptVersion:CORE_V02_SCRIPT_VERSION,protocolVersion:this.design.protocolVersion,isProtocolV2:this.isProtocolV2,participantId:this.id,cell:this.cell,pace:this.pace,createdAt:new Date().toISOString(),preparation:this.preparation,initialPlan:[...this.initialPlan],labels:{...this.labels},finalPlan:this.plan,finalPayload:this.payload,firstPublishedPayload:this.published,reason:this.reason,protocolFlags:this.protocolFlags,review:this.review,recovery:this.recovery,recoveryResumed:this.pendingRecovery,reviewCompleted:this.review.completed,metrics:this.metrics(),design:this.design,events:this.events,responses:this.responses});}
+    export(){return clone({schemaVersion:this.isProtocolV2?2:1,...(this.isFastPolicy?{participantPolicyVersion:this.participantPolicyVersion}:{}),scriptVersion:this.isFastPolicy?FAST_POLICY:VERSION,coreScriptVersion:CORE_V02_SCRIPT_VERSION,protocolVersion:this.design.protocolVersion,isProtocolV2:this.isProtocolV2,participantId:this.id,cell:this.cell,pace:this.pace,createdAt:new Date().toISOString(),preparation:this.preparation,initialPlan:[...this.initialPlan],labels:{...this.labels},finalPlan:this.plan,finalPayload:this.payload,firstPublishedPayload:this.published,reason:this.reason,protocolFlags:this.protocolFlags,review:this.review,recovery:this.recovery,recoveryResumed:this.pendingRecovery,reviewCompleted:this.review.completed,metrics:this.metrics(),design:this.design,events:this.events,responses:this.responses});}
   }
-  const API={Trial,CELLS,LEGACY_REGISTRY,P0,LABELS,FIELDS,NAMES,VERSION,CORE_V02_SCRIPT_VERSION,LEGACY_PROTOCOL_VERSION:LEGACY_PROTOCOL,CORE_V02_PROTOCOL_VERSION:CORE_V02_PROTOCOL,PLAN_DEPENDENT_PROTOCOL_VERSION:PLAN_DEPENDENT_PROTOCOL,V2_P0,V2_LABELS,V2_DURATIONS,REVIEW_CHECKS,PAUSE_LIMIT_MS,E1_AT_MS,safeFields};
+  const API={Trial,CELLS,LEGACY_REGISTRY,P0,LABELS,FIELDS,NAMES,VERSION,CORE_V02_SCRIPT_VERSION,LEGACY_PROTOCOL_VERSION:LEGACY_PROTOCOL,CORE_V02_PROTOCOL_VERSION:CORE_V02_PROTOCOL,PLAN_DEPENDENT_PROTOCOL_VERSION:PLAN_DEPENDENT_PROTOCOL,V2_P0,V2_LABELS,V2_DURATIONS,FAST_DURATIONS,CLASSIC_POLICY,FAST_POLICY,REVIEW_CHECKS,PAUSE_LIMIT_MS,E1_AT_MS,safeFields};
   return API;
 })();
   const API=Oversight;

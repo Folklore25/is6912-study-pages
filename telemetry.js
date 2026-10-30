@@ -22,7 +22,7 @@
 (function (root) {
   'use strict';
 
-  var VERSION = '2026-10-20-telemetry-v03-patch1';
+  var VERSION = '2026-10-30-telemetry-v04';
   var ENDPOINT = '/api/events';
   var MAX_QUEUE = 400;
   var MAX_BATCH_EVENTS = 50;
@@ -106,7 +106,7 @@
       stage: null, stageStartMs: pageStartMs, stageActiveMs: 0, phase: null, stepId: null,
       planVisible: true, trial: null, cell: null, rendered: false,
       design: null,
-      visible: true, focused: true, exposedVisible: true, exposedFocused: true,
+      systemHeld:false,visible: true, focused: true, exposedVisible: true, exposedFocused: true,
     };
 
     /* ------------------------------------------------------------- clocks */
@@ -116,7 +116,7 @@
       var now = performance.now();
       var delta = now - lastClockMs;
       // Only visible-and-focused time is active dwell; everything else is a proxy.
-      if (delta > 0 && state.visible && state.focused) activeMs += delta;
+      if (delta > 0 && state.visible && state.focused && !state.systemHeld) activeMs += delta;
       lastClockMs = now;
     }
     function wallMs() { return performance.now() - pageStartMs; }
@@ -332,12 +332,12 @@
       // Start from the real document state so a blurred or hidden page is not assumed visible.
       state.visible = document.visibilityState !== 'hidden';
       state.focused = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
-      state.exposedVisible = state.visible;
-      state.exposedFocused = state.focused;
+      state.exposedVisible = state.visible&&!state.systemHeld;
+      state.exposedFocused = state.focused&&!state.systemHeld;
       purgeOtherSessions();
       load();
       push('page_load', {
-        data: { width: root.innerWidth || 0, height: root.innerHeight || 0, restored: restored, visible: state.visible, focused: state.focused },
+        data: { width: root.innerWidth || 0, height: root.innerHeight || 0, restored: restored, visible: state.visible&&!state.systemHeld, focused: state.focused&&!state.systemHeld },
       });
       startListeners();
       if (intervalTimer) clearInterval(intervalTimer);
@@ -404,7 +404,7 @@
       if (!changed) return;
       push('phase_render', { data: { reason: state.rendered ? 'state_change' : 'initial' }, phase: state.phase, stepId: state.stepId });
       state.rendered = true;
-      push('step_exposure', { data: { change: 'phase', visible: state.visible, focused: state.focused }, phase: state.phase, stepId: state.stepId });
+      push('step_exposure', { data: { change: 'phase', visible: state.visible&&!state.systemHeld, focused: state.focused&&!state.systemHeld }, phase: state.phase, stepId: state.stepId });
       flushSoon(FLUSH_DEBOUNCE);
     }
 
@@ -442,12 +442,12 @@
 
     function refreshExposure() {
       if (!sessionId) return;
-      var visibilityChanged = state.visible !== state.exposedVisible;
-      var focusChanged = state.focused !== state.exposedFocused;
-      state.exposedVisible = state.visible;
-      state.exposedFocused = state.focused;
+      var visibilityChanged = (state.visible&&!state.systemHeld) !== state.exposedVisible;
+      var focusChanged = (state.focused&&!state.systemHeld) !== state.exposedFocused;
+      state.exposedVisible = state.visible&&!state.systemHeld;
+      state.exposedFocused = state.focused&&!state.systemHeld;
       if ((!visibilityChanged && !focusChanged) || !state.phase) return;
-      push('step_exposure', { data: { change: visibilityChanged ? 'visibility' : 'focus', visible: state.visible, focused: state.focused }, phase: state.phase, stepId: state.stepId });
+      push('step_exposure', { data: { change: visibilityChanged ? 'visibility' : 'focus', visible: state.visible&&!state.systemHeld, focused: state.focused&&!state.systemHeld }, phase: state.phase, stepId: state.stepId });
     }
 
     /** Coarse heartbeat: bounds the last observed dwell for an abandoned session. */
@@ -455,7 +455,7 @@
       if (!sessionId || !state.stage) return;
       accumulate();
       push('heartbeat', {
-        data: { visible: state.visible, focused: state.focused, idleMs: idleMs(), stepId: state.stepId || '' },
+        data: { visible: state.visible&&!state.systemHeld, focused: state.focused&&!state.systemHeld, idleMs: idleMs(), stepId: state.stepId || '' },
         phase: state.phase, stepId: state.stepId,
       });
     }
@@ -522,6 +522,15 @@
       training_complete: function () { return ['practice_complete', {}]; },
       planning_attempt: function (data) { return ['planning_interaction', { action: 'submit', outcome: planningOutcome(data), part: 1 }]; },
       planning_assistance: function () { return ['planning_interaction', { action: 'assist', outcome: 'review', part: 2 }]; },
+      system_hold:function(data){return ['system_hold',{participantPaused:Boolean(data.participantPaused)}];},
+      system_return:function(){return ['system_return',{}];},
+      system_release:function(data){return ['system_release',{heldMs:Number(data.heldMs)||0}];},
+      public_step_completed:function(data){return ['public_step_completed',{stepId:data.step}];},
+      direction_selection:function(data){return ['direction_selection',{stepId:data.step}];},
+      replay_open:function(){return ['replay_open',{}];},
+      replay_filter:function(data){return ['replay_filter',{filter:data.filter}];},
+      replay_exposure:function(data){return ['replay_exposure',{visible:Boolean(data.visible),dwellMs:Number(data.dwellMs)||0}];},
+      replay_item_view:function(data){return ['replay_item_view',{index:data.index}];},
       survey_part_complete: function (data) { return ['survey_page', { part: Number(data.part) || 1, complete: false }]; },
       survey_complete: function () { return ['survey_page', { part: 4, complete: true }]; },
       interview_complete: function () { return ['interview_complete', { questions: document.querySelectorAll('#interview textarea').length }]; },
@@ -704,6 +713,7 @@
       attachTrial: attachTrial,
       setStage: setStage,
       setExecution: setExecution,
+      setSystemHeld:function(held){accumulate();state.systemHeld=Boolean(held);refreshExposure();},
       setPlanVisibility: function (visible) { state.planVisible = Boolean(visible); },
       languageInitial: languageInitial,
       languageChange: languageChange,

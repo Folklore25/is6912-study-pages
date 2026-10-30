@@ -18,9 +18,11 @@
   </form></dialog>
   <dialog id="direction" aria-labelledby="direction-title"><form id="direction-form">
     <div class="dialog-heading"><div><span class="eyebrow">当前操作已暂停</span><h2 id="direction-title">调整后续处理方式</h2></div><div class="lang-switch" role="group" aria-label="界面语言"><button type="button" translate="no" data-lang="en" lang="en" aria-pressed="true">EN</button><button type="button" translate="no" data-lang="zh" lang="zh-Hans" aria-pressed="false">中文</button></div><button type="button" id="cancel-redirect" data-tl="direction-cancel">关闭</button></div>
-    <p class="hint">选择一个处理方式。应用后仍保持暂停，确认预览后再继续。</p><p class="dialog-timer" id="direction-timer" role="timer"></p>
+    <p class="hint" id="direction-help">选择一个处理方式。应用后仍保持暂停，确认预览后再继续。</p><p class="dialog-timer" id="direction-timer" role="timer"></p>
     <label>处理方式<select id="redirect-choice"><option value="safe-form">使用任务要求中的报名字段模板</option><option value="venue-first">先处理场地</option><option value="catering-first">先处理茶点</option></select></label>
+    <div id="local-adjustment" hidden><h3>当前准备执行</h3><p id="adjust-current"></p><h3>你的局部安排预览</h3><div id="adjust-proposal" class="local-sequence"></div><p class="hint">应用只是安排步骤，尚未执行；关闭后仍然暂停。</p></div>
     <p id="direction-note" class="small"></p><div class="actions"><button type="submit" id="apply-redirect" class="primary" data-tl="direction-apply">应用，返回预览</button></div>
   </form></dialog>
+  <dialog id="visibility-return" aria-labelledby="visibility-title"><h2 id="visibility-title">任务已由系统挂起</h2><p>离开页面期间，执行进度保持不变。确认后回到离开前的状态；若原本正在编辑或暂停，仍保持原状。</p><div class="actions"><button id="visibility-continue" class="primary">确认返回任务</button><button id="visibility-stay">暂不返回</button></div></dialog><button id="held-return-control" class="primary held-return-control" hidden>任务仍挂起，点击返回</button>
   <script src="i18n.js"></script><script src="design.js"></script><script src="engine.js"></script><script src="scenario.js"></script><script src="telemetry.js"></script><script src="app.js"></script>
 </body></html>
