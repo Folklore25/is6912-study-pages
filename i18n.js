@@ -1136,6 +1136,7 @@ HLLI18n.addCatalog({
  "实施版本无效，请刷新后重试。": "Invalid implementation version. Refresh and retry.",
  "练习：安排一个文件处理步骤": "Practice: arrange a file-processing step",
  "当前准备保存文件副本。请先安排“重命名文件”，再回到保存副本。": "The current action will save a file copy. Arrange Rename file first, then return to saving the copy.",
+ "当前动作": "Current action",
  "1 · 暂停": "1 · Pause",
  "2 · 选择并应用步骤": "2 · Choose and apply a step",
  "3 · 继续": "3 · Resume",
